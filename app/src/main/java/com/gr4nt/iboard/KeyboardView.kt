@@ -64,6 +64,42 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     var aiBusy = false
         set(v) { if (field != v) { field = v; invalidate() } }
     var languageLabel: String = ""
+    var returnIcon: Icons.Kind? = null
+        set(v) { field = v; invalidate() }
+    var listening = false
+        set(v) { field = v; invalidate() }
+    /** Replaces the suggestions with a message (e.g. live dictation text). */
+    var statusText: String? = null
+        set(v) { field = v; invalidate() }
+    private var spaceFlashUntil = 0L
+
+    /** How the keys look, from the "Key customization" settings. */
+    data class Look(
+        val solid: Boolean = true,
+        val radiusDp: Int = 8,
+        val heightPct: Int = 100,
+        val textPct: Int = 100,
+        val uppercase: Boolean = true,
+        val spaceLabel: Boolean = false,
+        val stripIcons: Boolean = false,
+    )
+
+    var look = Look()
+        set(v) {
+            field = v
+            keyH = 45 * d * v.heightPct / 100f
+            numKeyH = 38 * d * v.heightPct / 100f
+            radius = v.radiusDp * d
+            textScale = v.textPct / 100f
+            shaderCache.clear(); requestLayout(); computeKeys(); invalidate()
+        }
+
+    /** Briefly shows the language name on the space bar after switching. */
+    fun flashSpaceLabel() {
+        spaceFlashUntil = SystemClock.uptimeMillis() + 1500
+        invalidate()
+        postDelayed({ invalidate() }, 1600)
+    }
 
     // --- geometry ---
     private val stripH = 44 * d
@@ -72,9 +108,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private val rowGap = 10 * d
     private val topPad = 4 * d
     private val bottomPad = 6 * d
-    private val keyH = 45 * d
-    private val numKeyH = 38 * d
-    private val radius = 9 * d
+    private var keyH = 45 * d
+    private var numKeyH = 38 * d
+    private val utilH = 40 * d
+    private var radius = 8 * d
+    private var textScale = 1f
 
     private class KeyBox(val key: Key, val rect: RectF, val row: Int)
 
@@ -124,10 +162,16 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val l = layout ?: return stripH + 4 * keyH
         var h = stripH + topPad + bottomPad
         l.rows.forEachIndexed { i, r ->
-            h += if (r.isNumberRow) numKeyH else keyH
-            if (i > 0) h += rowGap
+            h += rowHeight(r)
+            if (i > 0) h += if (r.isUtility) rowGap / 2f else rowGap
         }
         return h
+    }
+
+    private fun rowHeight(r: KeyRow) = when {
+        r.isUtility -> utilH
+        r.isNumberRow -> numKeyH
+        else -> keyH
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -142,7 +186,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val unit = (w - 2 * sidePad - (l.unitsPerRow - 1) * keyGap) / l.unitsPerRow
         var y = stripH + topPad
         l.rows.forEachIndexed { ri, row ->
-            val h = if (row.isNumberRow) numKeyH else keyH
+            val h = rowHeight(row)
+            if (row.isUtility) y -= rowGap / 2f
             val fixed = row.keys.filter { it.width != Key.FLEX }.sumOf { it.width.toDouble() }.toFloat()
             val flexCount = row.keys.count { it.width == Key.FLEX }
             val flexUnits = if (flexCount > 0) max(1f, (l.unitsPerRow - fixed) / flexCount) else 0f
@@ -151,7 +196,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 u * unit + (u - 1) * keyGap
             }
             val total = widths.sum() + (row.keys.size - 1) * keyGap
-            var x = (w - total) / 2f
+            var x = if (row.isUtility) sidePad else (w - total) / 2f
             for (i in row.keys.indices) {
                 boxes += KeyBox(row.keys[i], RectF(x, y, x + widths[i], y + h), ri)
                 x += widths[i] + keyGap
@@ -204,6 +249,22 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val r = b.rect
         val k = b.key
         val pressed = isPressed(b)
+        if (k.type == KeyType.SPACER) return
+        if (layout?.rows?.getOrNull(b.row)?.isUtility == true) {
+            // Bare icons under the keyboard, like iOS's globe and dictation buttons.
+            if (pressed) {
+                fillPaint.color = theme.keyFillPressed
+                canvas.drawCircle(r.centerX(), r.centerY(), min(r.height(), r.width()) * 0.48f, fillPaint)
+            }
+            val kind = when (k.type) {
+                KeyType.GLOBE -> Icons.Kind.GLOBE
+                KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+                else -> Icons.Kind.MIC
+            }
+            val color = if (k.type == KeyType.MIC && listening) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
+            Icons.draw(canvas, kind, r.centerX(), r.centerY(), min(r.height() * 0.62f, 26 * d), color)
+            return
+        }
         val trackpadOn = presses.values.any { it.trackpad }
         val accent = k.type == KeyType.RETURN && returnAccent
         val fillColor = when {
@@ -218,7 +279,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         // soft drop shadow
         shadowPaint.color = theme.keyShadow
         shadowPaint.alpha = (shadowPaint.alpha * alpha).toInt()
-        tmpRect.set(r.left, r.top + 1.2f * d, r.right, r.bottom + 1.2f * d)
+        tmpRect.set(r.left, r.top + 1.1f * d, r.right, r.bottom + 1.1f * d)
         canvas.drawRoundRect(tmpRect, radius, radius, shadowPaint)
 
         fillPaint.color = fillColor
@@ -226,7 +287,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         canvas.drawRoundRect(r, radius, radius, fillPaint)
 
         // liquid-glass sheen on the upper half
-        if (!accent) {
+        if (!accent && !look.solid) {
             glossPaint.shader = shaderCache.getOrPut(r.height().toInt()) {
                 LinearGradient(0f, 0f, 0f, r.height() * 0.55f, theme.keyHighlightTop, 0x00FFFFFF, Shader.TileMode.CLAMP)
             }
@@ -237,9 +298,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             canvas.drawRoundRect(tmpRect, radius, radius, glossPaint)
             canvas.restore()
         }
-        strokePaint.color = theme.keyStroke
-        strokePaint.alpha = (strokePaint.alpha * alpha).toInt()
-        canvas.drawRoundRect(r, radius, radius, strokePaint)
+        if (!look.solid) {
+            strokePaint.color = theme.keyStroke
+            strokePaint.alpha = (strokePaint.alpha * alpha).toInt()
+            canvas.drawRoundRect(r, radius, radius, strokePaint)
+        }
 
         val fg = if (accent) theme.accentText else theme.keyText
         val contentAlpha = if (trackpadOn && k.type != KeyType.SPACE) 0.15f else 1f
@@ -251,7 +314,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.CHAR -> {
                 val label = displayLabel(k.label)
                 textPaint.typeface = regular
-                textPaint.textSize = when {
+                textPaint.textSize = textScale * when {
                     label.length > 2 -> 15 * sp
                     layout?.rows?.getOrNull(b.row)?.isNumberRow == true -> 19 * sp
                     else -> 23 * sp
@@ -261,9 +324,10 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             }
             KeyType.SPACE -> {
                 textPaint.typeface = regular
-                textPaint.textSize = 15 * sp
+                textPaint.textSize = 15 * sp * textScale
                 textPaint.color = theme.keySubText.withAlpha(alpha)
-                val label = if (trackpadOn) "" else k.label
+                val showLabel = look.spaceLabel || SystemClock.uptimeMillis() < spaceFlashUntil
+                val label = if (trackpadOn || !showLabel) "" else k.label
                 canvas.drawText(label, cx, baseline(cy, textPaint), textPaint)
             }
             KeyType.SHIFT -> Icons.draw(
@@ -278,17 +342,19 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.GLOBE -> Icons.draw(canvas, Icons.Kind.GLOBE, cx, cy, iconSize, fgA)
             KeyType.RETURN -> {
                 val label = returnLabel
-                if (label == null) Icons.draw(canvas, Icons.Kind.RETURN, cx, cy, iconSize, fgA)
+                val icon = returnIcon
+                if (icon != null) Icons.draw(canvas, icon, cx, cy, iconSize, fgA)
+                else if (label == null) Icons.draw(canvas, Icons.Kind.RETURN, cx, cy, iconSize, fgA)
                 else {
                     textPaint.typeface = medium
-                    textPaint.textSize = 15.5f * sp
+                    textPaint.textSize = 15.5f * sp * textScale
                     textPaint.color = fgA
                     canvas.drawText(label, cx, baseline(cy, textPaint), textPaint)
                 }
             }
             else -> {
                 textPaint.typeface = regular
-                textPaint.textSize = 16 * sp
+                textPaint.textSize = 16 * sp * textScale
                 textPaint.color = fgA
                 canvas.drawText(k.label, cx, baseline(cy, textPaint), textPaint)
             }
@@ -296,6 +362,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun displayLabel(label: String): String {
+        if ((shift == ShiftState.OFF && !look.uppercase) || label.length != 1) return label
+        val up = label.uppercase()
+        return if (up.length == 1) up else label
+    }
+
+    private fun typedLabel(label: String): String {
         if (shift == ShiftState.OFF || label.length != 1) return label
         val up = label.uppercase()
         return if (up.length == 1) up else label
@@ -337,7 +409,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         textPaint.typeface = regular
         textPaint.textSize = 32 * sp
         textPaint.color = theme.keyText
-        canvas.drawText(displayLabel(b.key.label), (left + right) / 2f, baseline(top + topH * 0.48f, textPaint), textPaint)
+        canvas.drawText(typedLabel(b.key.label), (left + right) / 2f, baseline(top + topH * 0.48f, textPaint), textPaint)
     }
 
     private fun drawPopup(canvas: Canvas, p: Press) {
@@ -366,7 +438,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 canvas.drawRoundRect(tmpRect, radius, radius, fillPaint)
                 textPaint.color = theme.accentText
             } else textPaint.color = theme.keyText
-            val label = displayLabel(popupAlts[i])
+            val label = typedLabel(popupAlts[i])
             textPaint.textSize = if (label.length > 2) 15 * sp else 24 * sp
             canvas.drawText(label, tmpRect.centerX(), baseline(tmpRect.centerY(), textPaint), textPaint)
         }
@@ -374,7 +446,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     // --- suggestion bar ---
 
-    private val iconW get() = 44 * d
+    private val iconW get() = if (look.stripIcons) 44 * d else 4 * d
 
     private fun slotOrder(): IntArray = intArrayOf(1, 0, 2) // display slot -> suggestion index
 
@@ -393,6 +465,19 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun drawStrip(canvas: Canvas) {
+        statusText?.let { msg ->
+            stripPaint.typeface = medium
+            stripPaint.color = theme.stripText
+            Icons.draw(canvas, Icons.Kind.MIC, 22 * d, stripH / 2f, 18 * d, theme.accent)
+            val t = TextUtils.ellipsize(msg, stripPaint, width - 70 * d, TextUtils.TruncateAt.START).toString()
+            canvas.drawText(t, width / 2f, baseline(stripH / 2f, stripPaint), stripPaint)
+            return
+        }
+        if (look.stripIcons) drawStripIcons(canvas)
+        drawSuggestions(canvas)
+    }
+
+    private fun drawStripIcons(canvas: Canvas) {
         val iconColor = theme.stripText.withAlpha(0.55f)
         // clipboard button
         if (stripPressed == -1) {
@@ -411,8 +496,16 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             canvas.drawCircle(width - iconW / 2f - 4 * d, stripH / 2f, 17 * d, fillPaint)
         }
         Icons.draw(canvas, Icons.Kind.SPARKLE, width - iconW / 2f - 4 * d, stripH / 2f, 20 * d, aiColor)
+    }
 
-        if (suggestions.isEmpty()) return
+    private fun drawSuggestions(canvas: Canvas) {
+        if (suggestions.isEmpty()) {
+            // Empty iOS bar still shows its two faint dividers.
+            dividerPaint.color = theme.stripDivider
+            canvas.drawLine(width / 3f, stripH * 0.3f, width / 3f, stripH * 0.7f, dividerPaint)
+            canvas.drawLine(width * 2 / 3f, stripH * 0.3f, width * 2 / 3f, stripH * 0.7f, dividerPaint)
+            return
+        }
         val rects = slotRects()
         val order = slotOrder()
         dividerPaint.color = theme.stripDivider
@@ -501,8 +594,9 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun stripHit(x: Float): Int {
-        if (x < iconW + 4 * d) return -1
-        if (x > width - iconW - 4 * d) return 3
+        if (statusText != null) return -2
+        if (look.stripIcons && x < iconW + 4 * d) return -1
+        if (look.stripIcons && x > width - iconW - 4 * d) return 3
         if (suggestions.isEmpty()) return -2
         slotRects().forEachIndexed { i, r -> if (x >= r.left && x < r.right) return i }
         return -2
@@ -540,6 +634,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun onPress(p: Press) {
         val k = p.box.key
+        if (k.type == KeyType.SPACER) return
         listener.onKeyFeedback(k)
         when (k.type) {
             KeyType.BACKSPACE -> {

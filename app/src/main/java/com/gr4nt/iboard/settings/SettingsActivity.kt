@@ -123,6 +123,29 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateStatus()
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) {
+            intent.removeExtra(EXTRA_REQUEST_MIC)
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7) Toast.makeText(
+            this,
+            if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+                "Microphone allowed — tap 🎤 on the keyboard to dictate" else "Voice typing needs the microphone",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+
+    companion object {
+        const val EXTRA_REQUEST_MIC = "request_mic"
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

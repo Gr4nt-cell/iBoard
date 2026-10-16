@@ -20,6 +20,18 @@ class Prefs(context: Context) {
     val learnWords: Boolean get() = sp.getBoolean(LEARN, true)
     val clipboardHistory: Boolean get() = sp.getBoolean(CLIP_HISTORY, true)
 
+    // Key customization
+    val keyStyle: String get() = sp.getString(KEY_STYLE, "solid") ?: "solid"
+    val keyRadius: Int get() = sp.getInt(KEY_RADIUS, 8)
+    val keyHeight: Int get() = sp.getInt(KEY_HEIGHT, 100)
+    val keyTextSize: Int get() = sp.getInt(KEY_TEXT_SIZE, 100)
+    val uppercaseLabels: Boolean get() = sp.getBoolean(UPPERCASE_LABELS, true)
+    val spaceLabel: Boolean get() = sp.getBoolean(SPACE_LABEL, false)
+    val utilityRow: Boolean get() = sp.getBoolean(UTILITY_ROW, true)
+    val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
+    val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
+    val voiceTyping: Boolean get() = sp.getBoolean(VOICE_TYPING, true)
+
     val languages: List<String>
         get() {
             val set = sp.getStringSet(LANGUAGES, null) ?: setOf("en")
@@ -45,7 +57,10 @@ class Prefs(context: Context) {
 
     /** A fingerprint of settings that require rebuilding the keyboard view. */
     fun visualSignature(night: Boolean): String =
-        listOf(theme, gradient, numberRow, keyPopup, languages.joinToString(), night).joinToString("|")
+        listOf(
+            theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
+            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping,
+        ).joinToString("|")
 
     companion object {
         const val THEME = "theme"
@@ -66,6 +81,16 @@ class Prefs(context: Context) {
         const val AI_KEY = "ai_key"
         const val AI_MODEL = "ai_model"
         const val AI_BASE_URL = "ai_base_url"
+        const val KEY_STYLE = "key_style"
+        const val KEY_RADIUS = "key_radius"
+        const val KEY_HEIGHT = "key_height"
+        const val KEY_TEXT_SIZE = "key_text_size"
+        const val UPPERCASE_LABELS = "uppercase_labels"
+        const val SPACE_LABEL = "space_label"
+        const val UTILITY_ROW = "utility_row"
+        const val STRIP_ICONS = "strip_icons"
+        const val ACCENT_COLOR = "accent_color"
+        const val VOICE_TYPING = "voice_typing"
 
         const val DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
         val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")

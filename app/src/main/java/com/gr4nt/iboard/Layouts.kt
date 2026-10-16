@@ -1,6 +1,6 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER }
 
 enum class Page { LETTERS, SYMBOLS, MORE_SYMBOLS }
 
@@ -20,7 +20,7 @@ data class Key(
     }
 }
 
-class KeyRow(val keys: List<Key>, val isNumberRow: Boolean = false)
+class KeyRow(val keys: List<Key>, val isNumberRow: Boolean = false, val isUtility: Boolean = false)
 
 class KeyboardLayout(val rows: List<KeyRow>, val unitsPerRow: Float, val rtl: Boolean)
 
@@ -44,6 +44,8 @@ object Layouts {
         numberRow: Boolean,
         field: FieldKind,
         showGlobe: Boolean,
+        utilityRow: Boolean = true,
+        voice: Boolean = true,
     ): KeyboardLayout {
         val rows = mutableListOf<KeyRow>()
         val units = if (lang == "de" || lang == "ar") 11f else 10f
@@ -85,7 +87,7 @@ object Layouts {
         bottom += if (page == Page.LETTERS) Key(KeyType.TO_SYMBOLS, "123", 1.25f)
         else Key(KeyType.TO_LETTERS, if (lang == "ar") "أب" else "ABC", 1.25f)
         bottom += Key(KeyType.EMOJI, width = 1.25f)
-        if (showGlobe) bottom += Key(KeyType.GLOBE, width = 1.1f)
+        if (showGlobe && !utilityRow) bottom += Key(KeyType.GLOBE, width = 1.1f)
         when (field) {
             FieldKind.EMAIL -> {
                 bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
@@ -99,8 +101,16 @@ object Layouts {
             }
             FieldKind.TEXT -> bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
         }
-        bottom += Key(KeyType.RETURN, width = 2.2f)
+        bottom += Key(KeyType.RETURN, width = 2.4f)
         rows += KeyRow(bottom)
+
+        // iOS puts the globe and dictation mic below the keys; clipboard sits beside the globe.
+        if (utilityRow) {
+            val util = mutableListOf(Key(KeyType.GLOBE, width = 1.5f), Key(KeyType.CLIPBOARD, width = 1.5f),
+                Key(KeyType.SPACER, width = Key.FLEX))
+            if (voice) util += Key(KeyType.MIC, width = 1.5f)
+            rows += KeyRow(util, isUtility = true)
+        }
 
         return KeyboardLayout(rows, units, rtl = lang == "ar")
     }

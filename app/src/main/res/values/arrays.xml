@@ -38,14 +38,42 @@
         <item>Ocean (blue → mint)</item>
         <item>Sunset (peach → rose)</item>
         <item>Graphite (neutral)</item>
+        <item>Classic iOS grey</item>
     </string-array>
     <string-array name="gradient_values">
         <item>blossom</item>
         <item>ocean</item>
         <item>sunset</item>
         <item>graphite</item>
+        <item>classic</item>
     </string-array>
     <string-array name="default_langs">
         <item>en</item>
+    </string-array>
+    <string-array name="key_style_entries">
+        <item>iOS 27 (solid keys)</item>
+        <item>Liquid Glass (frosted keys)</item>
+    </string-array>
+    <string-array name="key_style_values">
+        <item>solid</item>
+        <item>glass</item>
+    </string-array>
+    <string-array name="accent_entries">
+        <item>Blue</item>
+        <item>Green</item>
+        <item>Purple</item>
+        <item>Pink</item>
+        <item>Orange</item>
+        <item>Teal</item>
+        <item>Graphite</item>
+    </string-array>
+    <string-array name="accent_values">
+        <item>blue</item>
+        <item>green</item>
+        <item>purple</item>
+        <item>pink</item>
+        <item>orange</item>
+        <item>teal</item>
+        <item>graphite</item>
     </string-array>
 </resources>

@@ -8,7 +8,7 @@ import kotlin.math.min
 
 /** Small, crisp line icons drawn in code (SF-Symbols-like weight). */
 object Icons {
-    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN }
+    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN, SEARCH, MIC }
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
@@ -137,6 +137,18 @@ object Icons {
                 path.lineTo(cx, cy + h * 0.35f)
                 path.lineTo(cx + h * 0.6f, cy - h * 0.25f)
                 canvas.drawPath(path, stroke)
+            }
+            Kind.SEARCH -> {
+                canvas.drawCircle(cx - h * 0.15f, cy - h * 0.15f, h * 0.55f, stroke)
+                canvas.drawLine(cx + h * 0.25f, cy + h * 0.25f, cx + h * 0.75f, cy + h * 0.75f, stroke)
+            }
+            Kind.MIC -> {
+                r.set(cx - h * 0.3f, cy - h * 0.95f, cx + h * 0.3f, cy + h * 0.25f)
+                canvas.drawRoundRect(r, h * 0.3f, h * 0.3f, stroke)
+                r.set(cx - h * 0.6f, cy - h * 0.35f, cx + h * 0.6f, cy + h * 0.55f)
+                canvas.drawArc(r, 0f, 180f, false, stroke)
+                canvas.drawLine(cx, cy + h * 0.55f, cx, cy + h * 0.9f, stroke)
+                canvas.drawLine(cx - h * 0.3f, cy + h * 0.9f, cx + h * 0.3f, cy + h * 0.9f, stroke)
             }
             Kind.CLOCK -> {
                 val rad = h * 0.85f

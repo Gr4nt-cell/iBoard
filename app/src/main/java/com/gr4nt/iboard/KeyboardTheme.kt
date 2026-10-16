@@ -39,6 +39,62 @@ data class KeyboardTheme(
         fun resolve(context: Context, prefs: Prefs): KeyboardTheme {
             val dark = isNight(context, prefs)
             val g = gradientFor(prefs.gradient, dark)
+            val base = if (prefs.keyStyle == "glass") glass(dark, g) else solid(dark, g)
+            return base.copy(accent = accentFor(prefs.accentColor, dark))
+        }
+
+        /** iOS 27 look: opaque rounded keys with a crisp bottom shadow. */
+        private fun solid(dark: Boolean, g: IntArray): KeyboardTheme = if (!dark) KeyboardTheme(
+            dark = false,
+            gradient = g,
+            keyFill = Color.WHITE,
+            keyFillPressed = Color.rgb(212, 214, 220),
+            specialFill = Color.WHITE,
+            specialFillPressed = Color.rgb(212, 214, 220),
+            keyHighlightTop = Color.TRANSPARENT,
+            keyStroke = Color.TRANSPARENT,
+            keyShadow = Color.argb(90, 137, 138, 141),
+            keyText = Color.BLACK,
+            keySubText = Color.argb(140, 0, 0, 0),
+            accent = Color.rgb(0, 122, 255),
+            accentText = Color.WHITE,
+            stripText = Color.BLACK,
+            stripDivider = Color.argb(50, 60, 60, 67),
+            bubbleFill = Color.WHITE,
+            panelCard = Color.argb(220, 255, 255, 255),
+        ) else KeyboardTheme(
+            dark = true,
+            gradient = g,
+            keyFill = Color.rgb(88, 88, 94),
+            keyFillPressed = Color.rgb(125, 125, 132),
+            specialFill = Color.rgb(88, 88, 94),
+            specialFillPressed = Color.rgb(125, 125, 132),
+            keyHighlightTop = Color.TRANSPARENT,
+            keyStroke = Color.TRANSPARENT,
+            keyShadow = Color.argb(140, 0, 0, 0),
+            keyText = Color.WHITE,
+            keySubText = Color.argb(160, 255, 255, 255),
+            accent = Color.rgb(10, 132, 255),
+            accentText = Color.WHITE,
+            stripText = Color.WHITE,
+            stripDivider = Color.argb(60, 255, 255, 255),
+            bubbleFill = Color.rgb(110, 110, 116),
+            panelCard = Color.argb(60, 255, 255, 255),
+        )
+
+        private fun accentFor(name: String, dark: Boolean): Int = when (name) {
+            "green" -> if (dark) Color.rgb(48, 209, 88) else Color.rgb(52, 199, 89)
+            "purple" -> if (dark) Color.rgb(191, 90, 242) else Color.rgb(175, 82, 222)
+            "pink" -> if (dark) Color.rgb(255, 55, 95) else Color.rgb(255, 45, 85)
+            "orange" -> if (dark) Color.rgb(255, 159, 10) else Color.rgb(255, 149, 0)
+            "teal" -> if (dark) Color.rgb(64, 200, 224) else Color.rgb(48, 176, 199)
+            "classic" -> if (dark) intArrayOf(0xFF2B2B2E.toInt(), 0xFF262629.toInt(), 0xFF202023.toInt())
+            else intArrayOf(0xFFE3E4E9.toInt(), 0xFFE0E1E6.toInt(), 0xFFDCDDE2.toInt())
+            "graphite" -> if (dark) Color.rgb(99, 99, 102) else Color.rgb(142, 142, 147)
+            else -> if (dark) Color.rgb(10, 132, 255) else Color.rgb(0, 122, 255)
+        }
+
+        private fun glass(dark: Boolean, g: IntArray): KeyboardTheme {
             return if (!dark) {
                 KeyboardTheme(
                     dark = false,
@@ -87,6 +143,8 @@ data class KeyboardTheme(
             else intArrayOf(0xFFCFE3F7.toInt(), 0xFFD5EEF0.toInt(), 0xFFD8F2E4.toInt())
             "sunset" -> if (dark) intArrayOf(0xFF34202A.toInt(), 0xFF2E1D2E.toInt(), 0xFF1E1726.toInt())
             else intArrayOf(0xFFF8DCCB.toInt(), 0xFFF3D3DC.toInt(), 0xFFE7D2EC.toInt())
+            "classic" -> if (dark) intArrayOf(0xFF2B2B2E.toInt(), 0xFF262629.toInt(), 0xFF202023.toInt())
+            else intArrayOf(0xFFE3E4E9.toInt(), 0xFFE0E1E6.toInt(), 0xFFDCDDE2.toInt())
             "graphite" -> if (dark) intArrayOf(0xFF1F1F23.toInt(), 0xFF1A1A1E.toInt(), 0xFF141417.toInt())
             else intArrayOf(0xFFE3E4E9.toInt(), 0xFFDCDDE3.toInt(), 0xFFD3D5DC.toInt())
             // "blossom" – matches the soft pink→lavender→blue look of the dialer

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory app:title="Appearance" app:iconSpaceReserved="false">
         <ListPreference
@@ -10,6 +11,38 @@
             app:key="gradient" app:title="Background gradient" app:defaultValue="blossom"
             app:entries="@array/gradient_entries" app:entryValues="@array/gradient_values"
             app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Key customization" app:iconSpaceReserved="false">
+        <ListPreference
+            app:key="key_style" app:title="Key style" app:defaultValue="solid"
+            app:entries="@array/key_style_entries" app:entryValues="@array/key_style_values"
+            app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            app:key="key_radius" app:title="Corner roundness" app:defaultValue="8"
+            android:max="20" app:min="0" app:showSeekBarValue="true" app:updatesContinuously="false"
+            app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            app:key="key_height" app:title="Key height (%)" app:defaultValue="100"
+            android:max="135" app:min="80" app:seekBarIncrement="5" app:showSeekBarValue="true"
+            app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            app:key="key_text_size" app:title="Letter size (%)" app:defaultValue="100"
+            android:max="130" app:min="80" app:seekBarIncrement="5" app:showSeekBarValue="true"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="uppercase_labels" app:title="Uppercase key labels"
+            app:summary="Off: labels follow Shift (lowercase keys)" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <ListPreference
+            app:key="accent_color" app:title="Return key color" app:defaultValue="blue"
+            app:entries="@array/accent_entries" app:entryValues="@array/accent_values"
+            app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="space_label" app:title="Label on space bar" app:defaultValue="false" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="utility_row" app:title="Globe &amp; mic row"
+            app:summary="iOS-style row under the keys with 🌐, clipboard and 🎤" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="voice_typing" app:title="Voice typing (mic key)" app:dependency="utility_row"
+            app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="strip_icons" app:title="Clipboard &amp; AI buttons on suggestion bar"
+            app:defaultValue="false" app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Keys" app:iconSpaceReserved="false">

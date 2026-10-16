@@ -73,6 +73,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        prefs.sp.registerOnSharedPreferenceChangeListener(prefListener)
         ai = AiPredictor(prefs)
         clipStore = ClipboardStore(this).apply {
             enabled = prefs.clipboardHistory
@@ -81,7 +82,21 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
     }
 
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        // Settings changed while the keyboard is on screen (e.g. the test box): rebuild it live.
+        keyboard?.post {
+            val night = KeyboardTheme.isNight(this, prefs)
+            if (isInputViewShown && prefs.visualSignature(night) != builtSignature) {
+                setInputView(onCreateInputView())
+                updateLayout()
+                refresh()
+            }
+        }
+    }
+
     override fun onDestroy() {
+        prefs.sp.unregisterOnSharedPreferenceChangeListener(prefListener)
+        voice?.destroy()
         clipStore.stop()
         suggester?.user?.save()
         scope.cancel()
@@ -96,6 +111,15 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val kv = KeyboardView(this, this).apply {
             theme = t
             showPreview = prefs.keyPopup
+            look = KeyboardView.Look(
+                solid = prefs.keyStyle != "glass",
+                radiusDp = prefs.keyRadius,
+                heightPct = prefs.keyHeight,
+                textPct = prefs.keyTextSize,
+                uppercase = prefs.uppercaseLabels,
+                spaceLabel = prefs.spaceLabel,
+                stripIcons = prefs.stripIcons,
+            )
         }
         frame.addView(kv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
@@ -161,6 +185,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         aiJob?.cancel()
+        stopVoice()
         keyboard?.cancelTouches()
         suggester?.user?.save()
     }
@@ -193,12 +218,16 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun updateLayout() {
         val kv = keyboard ?: return
         val info = currentInputEditorInfo
-        kv.layout = Layouts.build(lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1)
+        kv.layout = Layouts.build(
+            lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
+            utilityRow = prefs.utilityRow, voice = prefs.voiceTyping,
+        )
         kv.languageLabel = Prefs.languageLabel(lang)
         val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
         val noEnterAction = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
         val label = if (noEnterAction) null else Layouts.returnLabel(lang, action)
         kv.returnLabel = label
+        kv.returnIcon = if (label != null && action == EditorInfo.IME_ACTION_SEARCH) Icons.Kind.SEARCH else null
         kv.returnAccent = label != null && action in setOf(
             EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEARCH, EditorInfo.IME_ACTION_SEND,
         )
@@ -224,6 +253,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             KeyType.TO_MORE_SYMBOLS -> setPage(Page.MORE_SYMBOLS)
             KeyType.EMOJI -> showEmoji()
             KeyType.GLOBE -> nextLanguage()
+            KeyType.CLIPBOARD -> showClipboard()
+            KeyType.MIC -> toggleVoice()
             else -> {}
         }
     }
@@ -653,7 +684,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         prefs.currentLanguage = next
         suggester?.user?.save()
         setLanguage(next, rebuild = true)
-        Toast.makeText(this, Prefs.languageLabel(next), Toast.LENGTH_SHORT).show()
+        keyboard?.flashSpaceLabel()
     }
 
     // ------------------------------------------------------------ feedback
@@ -674,6 +705,83 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             }
             am.playSoundEffect(fx, -1f)
         }
+    }
+
+    // ------------------------------------------------------------ voice typing
+
+    private var voice: android.speech.SpeechRecognizer? = null
+    private var listening = false
+
+    private fun toggleVoice() {
+        if (listening) { stopVoice(); return }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Allow microphone access for voice typing", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, SettingsActivity::class.java)
+                .putExtra(SettingsActivity.EXTRA_REQUEST_MIC, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "No speech recognition service on this phone", Toast.LENGTH_LONG).show()
+            return
+        }
+        val r = voice ?: android.speech.SpeechRecognizer.createSpeechRecognizer(this).also { voice = it }
+        r.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) { keyboard?.statusText = "Listening…" }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() { keyboard?.statusText = "…" }
+            override fun onError(error: Int) {
+                if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
+                    error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
+                    error != android.speech.SpeechRecognizer.ERROR_CLIENT
+                ) Toast.makeText(this@IBoardService, "Voice typing error ($error)", Toast.LENGTH_SHORT).show()
+                endVoice()
+            }
+            override fun onResults(results: android.os.Bundle?) {
+                val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!text.isNullOrBlank()) commitDictation(text)
+                endVoice()
+            }
+            override fun onPartialResults(partial: android.os.Bundle?) {
+                val text = partial?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!text.isNullOrBlank()) keyboard?.statusText = text
+            }
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+        val tag = when (lang) {
+            "es" -> "es-ES"; "fr" -> "fr-FR"; "pt" -> "pt-BR"; "de" -> "de-DE"; "ar" -> "ar"; else -> "en-US"
+        }
+        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, tag)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        listening = true
+        keyboard?.listening = true
+        keyboard?.statusText = "Starting…"
+        r.startListening(intent)
+    }
+
+    private fun commitDictation(text: String) {
+        val ic = currentInputConnection ?: return
+        val before = ic.getTextBeforeCursor(2, 0)?.toString() ?: ""
+        val trimmed = before.trimEnd(' ')
+        val atStart = trimmed.isEmpty() || trimmed.last() in ".!?\n"
+        var out = if (atStart) text.replaceFirstChar { it.titlecase() } else text
+        if (before.isNotEmpty() && !before.last().isWhitespace()) out = " $out"
+        ic.commitText("$out ", 1)
+    }
+
+    private fun stopVoice() {
+        if (listening) voice?.stopListening()
+        endVoice()
+    }
+
+    private fun endVoice() {
+        listening = false
+        keyboard?.listening = false
+        keyboard?.statusText = null
     }
 
     companion object {
