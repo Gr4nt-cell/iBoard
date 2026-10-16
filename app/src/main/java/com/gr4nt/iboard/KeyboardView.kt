@@ -207,21 +207,34 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val fixed = row.keys.filter { it.width != Key.FLEX }.sumOf { it.width.toDouble() }.toFloat()
             val flexCount = row.keys.count { it.width == Key.FLEX }
             val flexUnits = if (flexCount > 0) max(1f, (l.unitsPerRow - fixed) / flexCount) else 0f
+            if (row.isUtility) {
+                // A slim, centered rounded bar holding the icons (fixed slot per icon).
+                val slot = min(52 * d, (w - 2 * sidePad - 24 * d) / row.keys.size)
+                val total = slot * row.keys.size
+                var x = (w - total) / 2f
+                for (k in row.keys) {
+                    boxes += KeyBox(k, RectF(x, y, x + slot, y + h), ri)
+                    x += slot
+                }
+                val capH = 36 * d
+                val top = y + (h - capH) / 2f
+                capsule.set((w - total) / 2f - 10 * d, top, (w + total) / 2f + 10 * d, top + capH)
+                capsuleShader = null
+                rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
+                y += h + rowGap
+                return@forEachIndexed
+            }
             val widths = row.keys.map { k ->
                 val u = if (k.width == Key.FLEX) flexUnits else k.width
                 u * unit + (u - 1) * keyGap
             }
             val total = widths.sum() + (row.keys.size - 1) * keyGap
-            var x = if (row.isUtility) sidePad else (w - total) / 2f
+            var x = (w - total) / 2f
             for (i in row.keys.indices) {
                 boxes += KeyBox(row.keys[i], RectF(x, y, x + widths[i], y + h), ri)
                 x += widths[i] + keyGap
             }
             rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
-            if (row.isUtility) {
-                capsule.set(sidePad + 2 * d, y + 2 * d, w - sidePad - 2 * d, y + h - 2 * d)
-                capsuleShader = null
-            }
             y += h + rowGap
         }
     }
@@ -274,17 +287,18 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             if (boxes.firstOrNull { it.row == b.row } === b) drawCapsule(canvas, alpha)
             if (pressed) {
                 fillPaint.color = if (theme.dark) 0x33FFFFFF else 0x22000000
-                tmpRect.set(r.left + 6 * d, capsule.top + 4 * d, r.right - 6 * d, capsule.bottom - 4 * d)
-                val rr = tmpRect.height() / 2f
+                tmpRect.set(r.left + 4 * d, capsule.top + 4 * d, r.right - 4 * d, capsule.bottom - 4 * d)
+                val rr = tmpRect.height() * 0.42f
                 canvas.drawRoundRect(tmpRect, rr, rr, fillPaint)
             }
             val kind = when (k.type) {
                 KeyType.GLOBE -> Icons.Kind.GLOBE
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
                 KeyType.EMOJI -> Icons.Kind.EMOJI
+                KeyType.AI -> Icons.Kind.SPARKLE
                 else -> Icons.Kind.MIC
             }
-            val color = if (k.type == KeyType.MIC && listening) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
+            val color = if ((k.type == KeyType.MIC && listening) || (k.type == KeyType.AI && (aiActive || aiBusy))) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
             Icons.draw(canvas, kind, r.centerX(), r.centerY(), min(r.height() * 0.62f, 26 * d), color)
             return
         }
@@ -387,7 +401,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     /** A frosted Liquid Glass pill holding the globe, emoji, clipboard and mic icons. */
     private fun drawCapsule(canvas: Canvas, alpha: Float) {
         if (capsule.isEmpty) return
-        val rr = capsule.height() / 2f
+        val rr = capsule.height() * 0.42f // rounded ends, not a full pill
         shadowPaint.color = if (theme.dark) 0x55000000 else 0x1F3C2A5A
         shadowPaint.alpha = (shadowPaint.alpha * alpha).toInt()
         tmpRect.set(capsule.left, capsule.top + 1.5f * d, capsule.right, capsule.bottom + 1.5f * d)

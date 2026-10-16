@@ -1,6 +1,6 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER, AI }
 
 enum class Page { LETTERS, SYMBOLS, MORE_SYMBOLS }
 
@@ -110,7 +110,7 @@ object Layouts {
         if (utilityRow) {
             val util = mutableListOf(
                 Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
-                Key(KeyType.CLIPBOARD, width = Key.FLEX),
+                Key(KeyType.AI, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
             )
             if (voice) util += Key(KeyType.MIC, width = Key.FLEX)
             rows += KeyRow(util, isUtility = true)

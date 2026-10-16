@@ -272,6 +272,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             KeyType.GLOBE -> nextLanguage()
             KeyType.CLIPBOARD -> showClipboard()
             KeyType.MIC -> toggleVoice()
+            KeyType.AI -> toggleAi()
             else -> {}
         }
     }
@@ -395,6 +396,19 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onKeyFeedback(key: Key) = feedback(key.type)
+
+    /** ✨ in the capsule: turns AI predictions on/off, or opens settings if no API key is set yet. */
+    private fun toggleAi() {
+        if (prefs.aiKey.isEmpty()) {
+            Toast.makeText(this, "Add an AI API key in iBoard settings to use AI predictions", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+        val on = !prefs.aiEnabled
+        prefs.sp.edit().putBoolean(Prefs.AI_ENABLED, on).apply()
+        Toast.makeText(this, if (on) "AI predictions on ✨" else "AI predictions off", Toast.LENGTH_SHORT).show()
+        refresh()
+    }
 
     override fun onEmojiResult(text: String) {
         feedback(KeyType.CHAR)
