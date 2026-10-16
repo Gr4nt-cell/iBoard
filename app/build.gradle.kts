@@ -24,6 +24,10 @@ android {
         }
     }
 
+    // Use the NDK already installed on the build machine (GitHub runners ship one).
+    (System.getenv("ANDROID_NDK_LATEST_HOME") ?: System.getenv("ANDROID_NDK_HOME"))
+        ?.takeIf { file(it).exists() }?.let { ndkPath = it }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
