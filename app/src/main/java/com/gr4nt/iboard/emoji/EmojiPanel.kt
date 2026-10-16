@@ -147,14 +147,14 @@ class EmojiPanel(
         adapter.notifyDataSetChanged()
         val firstCat = if (recents.isEmpty()) 1 else 0
         layoutManager.scrollToPositionWithOffset(starts[firstCat], 0)
-        categoryBar.selected = firstCat
+        categoryBar.active = firstCat
         title.text = EmojiData.CATEGORY_NAMES[firstCat]
     }
 
     private fun scrollToCategory(cat: Int) {
         listener.onFeedback()
         layoutManager.scrollToPositionWithOffset(sectionStarts[cat], 0)
-        categoryBar.selected = cat
+        categoryBar.active = cat
         title.text = EmojiData.CATEGORY_NAMES[cat]
     }
 
@@ -162,8 +162,8 @@ class EmojiPanel(
         val pos = layoutManager.findFirstCompletelyVisibleItemPosition().takeIf { it >= 0 }
             ?: layoutManager.findFirstVisibleItemPosition()
         val cat = cells.getOrNull(pos)?.category ?: return
-        if (cat != categoryBar.selected) {
-            categoryBar.selected = cat
+        if (cat != categoryBar.active) {
+            categoryBar.active = cat
             title.text = EmojiData.CATEGORY_NAMES[cat]
         }
     }
@@ -283,7 +283,7 @@ class EmojiPanel(
 
     /** Row of grey category icons at the bottom, with the active one highlighted. */
     private inner class CategoryBar(context: Context) : View(context) {
-        var selected = 1
+        var active = 1
             set(v) { field = v; invalidate() }
         var onPick: (Int) -> Unit = {}
         private val kinds = listOf(
@@ -297,11 +297,11 @@ class EmojiPanel(
             val cy = height / 2f
             kinds.forEachIndexed { i, k ->
                 val cx = w * i + w / 2f
-                if (i == selected) {
+                if (i == active) {
                     sel.color = theme.keyFill
                     canvas.drawCircle(cx, cy, minOf(w, height.toFloat()) * 0.42f, sel)
                 }
-                val color = if (i == selected) theme.keyText else theme.keySubText.withAlpha(0.8f)
+                val color = if (i == active) theme.keyText else theme.keySubText.withAlpha(0.8f)
                 Icons.draw(canvas, k, cx, cy, minOf(w * 0.55f, 19 * d), color)
             }
         }
@@ -310,7 +310,7 @@ class EmojiPanel(
         override fun onTouchEvent(e: MotionEvent): Boolean {
             if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_MOVE) {
                 val i = (e.x / (width / kinds.size.toFloat())).toInt().coerceIn(0, kinds.size - 1)
-                if (i != selected || e.actionMasked == MotionEvent.ACTION_UP) onPick(i)
+                if (i != active || e.actionMasked == MotionEvent.ACTION_UP) onPick(i)
             }
             return true
         }

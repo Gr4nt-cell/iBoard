@@ -17,11 +17,31 @@ data class Suggestion(
 class Suggester(
     val dictionary: Dictionary,
     val user: UserModel,
-    private val neighbors: Map<Char, String>,
+    val neighbors: Map<Char, String>,
 ) {
     class Result(val items: List<Suggestion>, val autoCorrect: String?)
 
-    fun forWord(typed: String, previous: String?, allowAutoCorrect: Boolean): Result {
+    fun forWord(typed: String, previous: String?, allowAutoCorrect: Boolean, sentenceStart: Boolean = false): Result {
+        if (dictionary.lang == "en" && typed.lowercase() in ENGLISH_I && typed[0] == 'i') {
+            val fixed = "I" + typed.substring(1)
+            return Result(
+                listOf(Suggestion(fixed, Suggestion.Kind.WORD, autoCorrect = allowAutoCorrect),
+                    Suggestion(typed, Suggestion.Kind.LITERAL)),
+                if (allowAutoCorrect) fixed else null,
+            )
+        }
+        // Elisions like l'homme, d'accord, qu'il: predict the part after the apostrophe.
+        val apo = typed.lastIndexOf('\'')
+        if (apo in 1..3 && apo < typed.length - 1 && dictionary.score(typed) == null) {
+            val head = typed.substring(0, apo + 1)
+            val r = forWord(typed.substring(apo + 1), previous, allowAutoCorrect, false)
+            return Result(
+                r.items.map { it.copy(text = if (it.text.startsWith(head)) it.text else head + it.text) },
+                r.autoCorrect?.let { head + it },
+            )
+        }
+        // A capitalized word in the middle of a sentence is probably a name: don't "fix" it.
+        val autoOk = allowAutoCorrect && (sentenceStart || !typed[0].isUpperCase())
         val lower = typed.lowercase()
         val norm = Dictionary.normalize(typed)
         val dictScore = dictionary.score(typed)
@@ -49,7 +69,7 @@ class Suggester(
         }
 
         var auto: String? = null
-        if (allowAutoCorrect && !valid && corrections.isNotEmpty()) {
+        if (autoOk && !valid && corrections.isNotEmpty()) {
             val best = corrections.first()
             val limit = when {
                 typed.length <= 3 -> 0.7f
@@ -59,7 +79,7 @@ class Suggester(
             if (best.distance <= limit && best.score > 1.2f) auto = best.word
         }
         // Accent fixes are always safe: "cafe" → "café" when only the accented form exists.
-        if (allowAutoCorrect && auto == null && dictScore == null && userCount == 0) {
+        if (autoOk && auto == null && dictScore == null && userCount == 0) {
             val accent = dictionary.completions(norm, 3).firstOrNull { Dictionary.normalize(it.first) == norm }
             if (accent != null) auto = accent.first
         }
@@ -69,7 +89,11 @@ class Suggester(
         if (auto != null) {
             items += Suggestion(applyCase(typed, auto), Suggestion.Kind.WORD, autoCorrect = true)
             items += Suggestion(typed, Suggestion.Kind.LITERAL)
-        } else if (valid || ranked.isEmpty()) {
+        } else if (valid) {
+            // iOS order: best guess in the middle, what you typed beside it.
+            ranked.firstOrNull()?.let { items += Suggestion(applyCase(typed, it), Suggestion.Kind.WORD) }
+            items += Suggestion(typed, Suggestion.Kind.LITERAL)
+        } else if (ranked.isEmpty()) {
             items += Suggestion(typed, Suggestion.Kind.LITERAL)
         }
         for (w in ranked) {
@@ -106,6 +130,7 @@ class Suggester(
     }
 
     companion object {
+        private val ENGLISH_I = setOf("i", "i'm", "i'll", "i've", "i'd")
         private val STARTERS = mapOf(
             "en" to listOf("I", "The", "Hi", "Thanks", "Okay", "What"),
             "es" to listOf("Hola", "El", "Yo", "Gracias", "La", "Qué"),

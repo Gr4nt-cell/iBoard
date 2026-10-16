@@ -104,7 +104,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private val presses = HashMap<Int, Press>()
-    private val handler = Handler(Looper.getMainLooper())
+    private val keyHandler = Handler(Looper.getMainLooper())
     private var popupAlts: List<String> = emptyList()
     private var popupOwner: Press? = null
     private val popupRect = RectF()
@@ -428,7 +428,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 canvas.drawRoundRect(tmpRect, 9 * d, 9 * d, fillPaint)
             }
             var label = when (s.kind) {
-                Suggestion.Kind.LITERAL -> "“${s.text}”"
+                Suggestion.Kind.LITERAL -> if (suggestions.any { it.autoCorrect }) "“${s.text}”" else s.text
                 else -> s.text
             }
             val showSpark = s.kind == Suggestion.Kind.AI || s.kind == Suggestion.Kind.PHRASE
@@ -545,13 +545,13 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.BACKSPACE -> {
                 backspaceRepeat = 0
                 listener.onBackspace(0)
-                handler.postDelayed(object : Runnable {
+                keyHandler.postDelayed(object : Runnable {
                     override fun run() {
                         if (!presses.containsValue(p)) return
                         backspaceRepeat++
                         listener.onBackspace(backspaceRepeat)
                         listener.onKeyFeedback(k)
-                        handler.postDelayed(this, if (backspaceRepeat > 12) 90L else 65L)
+                        keyHandler.postDelayed(this, if (backspaceRepeat > 12) 90L else 65L)
                     }
                 }, 420L)
             }
@@ -562,7 +562,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 listener.onShift(double)
             }
             KeyType.CHAR -> if (k.longPress.isNotEmpty()) {
-                handler.postDelayed({
+                keyHandler.postDelayed({
                     if (presses.containsValue(p) && !p.trackpad) {
                         p.longPressed = true
                         popupAlts = listOf(k.label) + k.longPress
@@ -574,7 +574,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                     }
                 }, 360L)
             }
-            KeyType.SPACE -> handler.postDelayed({
+            KeyType.SPACE -> keyHandler.postDelayed({
                 if (presses.containsValue(p) && !p.trackpad) {
                     p.trackpad = true
                     p.lastCursorX = p.downX
@@ -582,7 +582,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                     invalidate()
                 }
             }, 380L)
-            KeyType.GLOBE -> handler.postDelayed({
+            KeyType.GLOBE -> keyHandler.postDelayed({
                 if (presses.containsValue(p)) {
                     p.longPressed = true
                     listener.onGlobeLongPress()
@@ -629,7 +629,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun release(p: Press, commit: Boolean) {
         val k = p.box.key
-        handler.removeCallbacksAndMessages(null)
+        keyHandler.removeCallbacksAndMessages(null)
         if (p === popupOwner) {
             val alt = popupAlts.getOrNull(p.altIndex)
             popupOwner = null
@@ -645,14 +645,14 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     fun cancelTouches() {
-        handler.removeCallbacksAndMessages(null)
+        keyHandler.removeCallbacksAndMessages(null)
         presses.clear(); popupOwner = null; popupAlts = emptyList(); stripPressed = -2
         invalidate()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        handler.removeCallbacksAndMessages(null)
+        keyHandler.removeCallbacksAndMessages(null)
     }
 }
 

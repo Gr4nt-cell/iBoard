@@ -46,13 +46,13 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var keyboard: KeyboardView? = null
     private var emojiPanel: EmojiPanel? = null
     private var clipPanel: ClipboardPanel? = null
-    private var theme: KeyboardTheme? = null
+    private var kbTheme: KeyboardTheme? = null
     private var builtSignature = ""
 
     private var lang = "en"
     private var page = Page.LETTERS
     private var shift = ShiftState.OFF
-    private var field = FieldKind.TEXT
+    private var fieldKind = FieldKind.TEXT
     private var password = false
     private var incognito = false
     private var noAutoCorrect = false
@@ -90,7 +90,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onCreateInputView(): View {
         val t = KeyboardTheme.resolve(this, prefs)
-        theme = t
+        kbTheme = t
         val frame = FrameLayout(this)
         frame.background = t.backgroundDrawable()
         val kv = KeyboardView(this, this).apply {
@@ -124,21 +124,21 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
             InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
         ) || (cls == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
-        field = when {
+        fieldKind = when {
             cls == InputType.TYPE_CLASS_TEXT && (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
                 variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS) -> FieldKind.EMAIL
             cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI -> FieldKind.URL
             else -> FieldKind.TEXT
         }
         incognito = (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
-        noAutoCorrect = password || field != FieldKind.TEXT ||
+        noAutoCorrect = password || fieldKind != FieldKind.TEXT ||
             (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0 ||
             variation == InputType.TYPE_TEXT_VARIATION_PERSON_NAME ||
             variation == InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS ||
             variation == InputType.TYPE_TEXT_VARIATION_FILTER
         val appCaps = info.inputType and (InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
             InputType.TYPE_TEXT_FLAG_CAP_WORDS or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        ownCaps = appCaps == 0 && cls == InputType.TYPE_CLASS_TEXT && field == FieldKind.TEXT && !password &&
+        ownCaps = appCaps == 0 && cls == InputType.TYPE_CLASS_TEXT && fieldKind == FieldKind.TEXT && !password &&
             variation in setOf(
                 InputType.TYPE_TEXT_VARIATION_NORMAL,
                 InputType.TYPE_TEXT_VARIATION_SHORT_MESSAGE,
@@ -193,7 +193,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun updateLayout() {
         val kv = keyboard ?: return
         val info = currentInputEditorInfo
-        kv.layout = Layouts.build(lang, page, prefs.numberRow, field, prefs.languages.size > 1)
+        kv.layout = Layouts.build(lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1)
         kv.languageLabel = Prefs.languageLabel(lang)
         val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
         val noEnterAction = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
@@ -506,7 +506,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         pendingAutoCorrect = null
         if (word.isNotEmpty()) {
             if (s == null) local = listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else {
-                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect)
+                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect, sentenceStart)
                 pendingAutoCorrect = r.autoCorrect
                 local = r.items
             }
@@ -518,7 +518,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
 
         lastContext = before
-        val aiOn = ai.isConfigured && !incognito && field == FieldKind.TEXT
+        val aiOn = ai.isConfigured && !incognito && fieldKind == FieldKind.TEXT
         kv.aiActive = aiOn
         val cached = if (aiOn) ai.cached(before, lang) else null
         show(merge(word, local, cached, clip))
@@ -548,18 +548,22 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         fun has(t: String) = out.any { it.text.equals(t, ignoreCase = true) && it.kind != Suggestion.Kind.PHRASE }
         val aiWords = aiPred?.words.orEmpty().map { Suggester.applyCase(word, it) }
 
+        if (word.isNotEmpty() && aiWords.isEmpty()) return local.take(3)
         if (word.isNotEmpty()) {
-            val dict = suggester?.dictionary
+            val sg = suggester
             var auto = pendingAutoCorrect
             val aiTop = aiWords.firstOrNull()
-            if (aiTop != null && dict != null && prefs.autoCorrect && !noAutoCorrect) {
+            if (aiTop != null && sg != null && prefs.autoCorrect && !noAutoCorrect) {
                 if (aiTop.equals(word, true)) {
                     auto = null // the model says the typed word fits the sentence
                 } else {
-                    val dist = Dictionary.distance(word.lowercase(), aiTop.lowercase(), emptyMap(), 2.5f)
+                    val typedValid = sg.dictionary.contains(word) || sg.user.knows(word)
+                    val dist = Dictionary.distance(word.lowercase(), aiTop.lowercase(), sg.neighbors, 2.5f)
                     val isCompletion = Dictionary.normalize(aiTop).startsWith(Dictionary.normalize(word))
                     // Context-aware correction: trust the model when its word is a near miss of what was typed.
-                    if (dist <= 2.0f && !isCompletion && (dict.contains(aiTop) || word.length > 3)) auto = aiTop
+                    // A real word is only replaced for a one-key slip ("form" → "from"), never a different word.
+                    val maxDist = if (typedValid) 0.75f else 2.0f
+                    if (dist <= maxDist && !isCompletion && sg.dictionary.contains(aiTop)) auto = aiTop
                 }
             }
             pendingAutoCorrect = auto
@@ -597,7 +601,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun showEmoji() {
         val frame = root ?: return
-        val t = theme ?: return
+        val t = kbTheme ?: return
         closePanels()
         val panel = EmojiPanel(this, t, panelHeight(), object : EmojiPanel.Listener {
             override fun onEmoji(text: String) {
@@ -615,7 +619,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun showClipboard() {
         val frame = root ?: return
-        val t = theme ?: return
+        val t = kbTheme ?: return
         closePanels()
         val h = panelHeight()
         val panel = ClipboardPanel(this, t, h, clipStore,
