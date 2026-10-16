@@ -26,7 +26,13 @@ android {
 
     // Use the NDK already installed on the build machine (GitHub runners ship one).
     (System.getenv("ANDROID_NDK_LATEST_HOME") ?: System.getenv("ANDROID_NDK_HOME"))
-        ?.takeIf { file(it).exists() }?.let { ndkPath = it }
+        ?.takeIf { file(it).exists() }?.let { ndk ->
+            ndkPath = ndk
+            // Match ndkVersion to that NDK so AGP doesn't try to download another one.
+            file("$ndk/source.properties").takeIf { it.exists() }?.readLines()
+                ?.firstOrNull { it.startsWith("Pkg.Revision") }?.substringAfter("=")?.trim()
+                ?.let { ndkVersion = it }
+        }
 
     externalNativeBuild {
         cmake {
