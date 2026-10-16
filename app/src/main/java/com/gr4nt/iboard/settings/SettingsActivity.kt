@@ -122,6 +122,30 @@ class SettingsActivity : AppCompatActivity() {
 
     private var mainScroll = 0
 
+    /** Copies a font the user picks into private storage and switches the emoji style to it. */
+    private val pickFont = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val dest = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this@SettingsActivity)
+                    val tmp = java.io.File(dest.path + ".tmp")
+                    contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                    // Make sure Android can actually load it before switching over.
+                    android.graphics.Typeface.createFromFile(tmp)
+                    tmp.renameTo(dest)
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            if (ok) {
+                sp.edit().putString(Prefs.EMOJI_STYLE, "custom").putLong("emoji_font_stamp", System.currentTimeMillis()).apply()
+                toast("Emoji font imported")
+            } else toast("That file isn't a font Android can use")
+            refreshMain()
+        }
+    }
+
     private fun scroll(content: View) = ScrollView(this).apply {
         isFillViewport = true
         setBackgroundColor(p.background)
@@ -223,11 +247,22 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        val emoE = listOf("3D (Built-in)", "Phone's Emoji Font"); val emoV = listOf("3d", "system")
-        l.section("Emoji", "“Phone's Emoji Font” uses whatever emoji font is installed on your phone, so the keyboard matches what you send.") {
+        val hasCustom = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this).exists()
+        val emoE = mutableListOf("3D (Built-in)", "Phone's Emoji Font"); val emoV = mutableListOf("3d", "system")
+        if (hasCustom) { emoE += "Imported Font"; emoV += "custom" }
+        l.section("Emoji", "Import an emoji font (.ttf) that's on your phone and the keyboard will draw emoji with it. The font stays on this phone.") {
             navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {
                 choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "3d",
-                    "3D uses the bundled Fluent emoji art. Phone's Emoji Font uses your system emoji, including any emoji font you've installed.")
+                    "3D uses the bundled Fluent emoji art. Phone's Emoji Font uses your system emoji. Imported Font uses the .ttf you picked.")
+            }
+            actionRow(if (hasCustom) "Replace Emoji Font…" else "Import Emoji Font…", p.blue, Icons.Kind.TEXT_AA, orange) {
+                pickFont.launch(arrayOf("*/*"))
+            }
+            if (hasCustom) actionRow("Remove Imported Font", p.red) {
+                com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this@SettingsActivity).delete()
+                if (prefs.emojiStyle == "custom") sp.edit().putString(Prefs.EMOJI_STYLE, "3d").apply()
+                toast("Imported font removed")
+                refreshMain()
             }
         }
 

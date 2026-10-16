@@ -28,6 +28,27 @@ object EmojiImages {
     @Volatile
     var useArt = true
 
+    /** An emoji font the user imported from their phone (Settings › Emoji › Import Emoji Font). */
+    @Volatile
+    var customTypeface: android.graphics.Typeface? = null
+        private set
+
+    fun customFontFile(context: Context) = java.io.File(context.filesDir, "custom_emoji.ttf")
+
+    /** Applies the Emoji Style setting: "3d", "system" or "custom". */
+    fun configure(context: Context, style: String) {
+        customTypeface = if (style == "custom") {
+            try {
+                customFontFile(context).takeIf { it.exists() }?.let { android.graphics.Typeface.createFromFile(it) }
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+        useArt = style == "3d"
+        textPaint.typeface = customTypeface
+        EmojiData.setTypeface(customTypeface)
+    }
+
     /** Lists the bundled art once. Safe to call from any thread. */
     fun init(context: Context) {
         if (available != null) return

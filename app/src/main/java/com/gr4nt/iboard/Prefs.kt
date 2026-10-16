@@ -61,7 +61,7 @@ class Prefs(context: Context) {
     fun visualSignature(night: Boolean): String =
         listOf(
             theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
-            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping, bgOpacity, emojiStyle,
+            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
         ).joinToString("|")
 
     companion object {

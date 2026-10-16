@@ -75,6 +75,11 @@ object EmojiData {
         return scored.sortedBy { it.second }.map { it.first }.distinct().take(limit)
     }
 
+    fun setTypeface(tf: android.graphics.Typeface?) {
+        paint.typeface = tf
+        cached = null
+    }
+
     fun canDraw(s: String): Boolean = try { paint.hasGlyph(s) } catch (_: Exception) { true }
 
     /** Applies a Fitzpatrick skin tone to an emoji that supports it. */
