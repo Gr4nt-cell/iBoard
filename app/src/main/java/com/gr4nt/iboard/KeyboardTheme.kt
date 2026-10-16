@@ -82,16 +82,17 @@ data class KeyboardTheme(
             panelCard = Color.argb(60, 255, 255, 255),
         )
 
-        private fun accentFor(name: String, dark: Boolean): Int = when (name) {
-            "green" -> if (dark) Color.rgb(48, 209, 88) else Color.rgb(52, 199, 89)
-            "purple" -> if (dark) Color.rgb(191, 90, 242) else Color.rgb(175, 82, 222)
-            "pink" -> if (dark) Color.rgb(255, 55, 95) else Color.rgb(255, 45, 85)
-            "orange" -> if (dark) Color.rgb(255, 159, 10) else Color.rgb(255, 149, 0)
-            "teal" -> if (dark) Color.rgb(64, 200, 224) else Color.rgb(48, 176, 199)
-            "classic" -> if (dark) intArrayOf(0xFF2B2B2E.toInt(), 0xFF262629.toInt(), 0xFF202023.toInt())
-            else intArrayOf(0xFFE3E4E9.toInt(), 0xFFE0E1E6.toInt(), 0xFFDCDDE2.toInt())
-            "graphite" -> if (dark) Color.rgb(99, 99, 102) else Color.rgb(142, 142, 147)
-            else -> if (dark) Color.rgb(10, 132, 255) else Color.rgb(0, 122, 255)
+        private fun accentFor(name: String, dark: Boolean): Int {
+            val pair: Pair<Long, Long> = when (name) {
+                "green" -> 0xFF34C759 to 0xFF30D158
+                "purple" -> 0xFFAF52DE to 0xFFBF5AF2
+                "pink" -> 0xFFFF2D55 to 0xFFFF375F
+                "orange" -> 0xFFFF9500 to 0xFFFF9F0A
+                "teal" -> 0xFF30B0C7 to 0xFF40C8E0
+                "graphite" -> 0xFF8E8E93 to 0xFF636366
+                else -> 0xFF007AFF to 0xFF0A84FF
+            }
+            return (if (dark) pair.second else pair.first).toInt()
         }
 
         private fun glass(dark: Boolean, g: IntArray): KeyboardTheme {
