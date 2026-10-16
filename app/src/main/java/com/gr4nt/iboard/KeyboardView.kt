@@ -296,6 +296,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
                 KeyType.EMOJI -> Icons.Kind.EMOJI
                 KeyType.AI -> Icons.Kind.SPARKLE
+                KeyType.SETTINGS -> Icons.Kind.GEAR
                 else -> Icons.Kind.MIC
             }
             val color = if ((k.type == KeyType.MIC && listening) || (k.type == KeyType.AI && (aiActive || aiBusy))) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
@@ -801,7 +802,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                     invalidate()
                 }
             }, 380L)
-            KeyType.GLOBE -> keyHandler.postDelayed({
+            KeyType.GLOBE, KeyType.SETTINGS -> keyHandler.postDelayed({
                 if (presses.containsValue(p)) {
                     p.longPressed = true
                     listener.onGlobeLongPress()

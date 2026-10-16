@@ -274,6 +274,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             KeyType.CLIPBOARD -> showClipboard()
             KeyType.MIC -> toggleVoice()
             KeyType.AI -> toggleAi()
+            KeyType.SETTINGS -> startActivity(Intent(this, SettingsActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
             else -> {}
         }
     }

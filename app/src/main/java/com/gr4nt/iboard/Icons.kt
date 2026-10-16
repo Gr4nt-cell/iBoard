@@ -8,7 +8,7 @@ import kotlin.math.min
 
 /** Small, crisp line icons drawn in code (SF-Symbols-like weight). */
 object Icons {
-    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN, SEARCH, MIC, SUN, DROP, KEYCAP, SPEAKER, WAVE, EYE_OFF, CHECK, CHEVRON, TEXT_AA, NUM, HEIGHT, CORNER, BOOK, CAPSULE, PALETTE, KEYBOARD }
+    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN, SEARCH, MIC, SUN, DROP, KEYCAP, SPEAKER, WAVE, EYE_OFF, CHECK, CHEVRON, TEXT_AA, NUM, HEIGHT, CORNER, BOOK, CAPSULE, PALETTE, KEYBOARD, GEAR }
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
@@ -149,6 +149,17 @@ object Icons {
                 canvas.drawArc(r, 0f, 180f, false, stroke)
                 canvas.drawLine(cx, cy + h * 0.55f, cx, cy + h * 0.9f, stroke)
                 canvas.drawLine(cx - h * 0.3f, cy + h * 0.9f, cx + h * 0.3f, cy + h * 0.9f, stroke)
+            }
+            Kind.GEAR -> {
+                for (i in 0 until 8) {
+                    canvas.save()
+                    canvas.rotate(i * 45f, cx, cy)
+                    r.set(cx - h * 0.16f, cy - h * 0.9f, cx + h * 0.16f, cy - h * 0.5f)
+                    canvas.drawRoundRect(r, h * 0.06f, h * 0.06f, fill)
+                    canvas.restore()
+                }
+                canvas.drawCircle(cx, cy, h * 0.58f, stroke)
+                canvas.drawCircle(cx, cy, h * 0.22f, stroke)
             }
             Kind.SUN -> {
                 canvas.drawCircle(cx, cy, h * 0.38f, fill)

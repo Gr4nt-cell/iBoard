@@ -1,6 +1,6 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER, AI }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER, AI, SETTINGS }
 
 enum class Page { LETTERS, SYMBOLS, MORE_SYMBOLS }
 
@@ -86,10 +86,9 @@ object Layouts {
         val bottom = mutableListOf<Key>()
         bottom += if (page == Page.LETTERS) Key(KeyType.TO_SYMBOLS, "123", 1.25f)
         else Key(KeyType.TO_LETTERS, if (lang == "ar") "أب" else "ABC", 1.25f)
-        if (!utilityRow) {
-            bottom += Key(KeyType.EMOJI, width = 1.1f)
-            if (showGlobe) bottom += Key(KeyType.GLOBE, width = 1.1f)
-        }
+        if (!utilityRow) bottom += Key(KeyType.EMOJI, width = 1.1f)
+        // The globe only appears when there's more than one language to switch between.
+        if (showGlobe) bottom += Key(KeyType.GLOBE, width = 1.1f)
         val comma = if (lang == "ar") "،" else ","
         val left = when (field) {
             FieldKind.EMAIL -> Key(KeyType.CHAR, "@", 1f)
@@ -109,7 +108,7 @@ object Layouts {
         // Globe, emoji, clipboard and mic share one Liquid Glass capsule under the keys.
         if (utilityRow) {
             val util = mutableListOf(
-                Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
+                Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
                 Key(KeyType.AI, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
             )
             if (voice) util += Key(KeyType.MIC, width = Key.FLEX)
