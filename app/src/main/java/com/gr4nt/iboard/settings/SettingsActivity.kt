@@ -305,8 +305,13 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.section("AI Predictions", "Sends the text before the cursor to the provider you choose. Never used in password or incognito fields.") {
-            switchRow(Icons.Kind.SPARKLE, purple, "AI Word Prediction", prefs.aiEnabled,
-                subtitle = "Context-aware words, fixes & phrases") { putBool(Prefs.AI_ENABLED, it) }
+            switchRow(Icons.Kind.SPARKLE, purple, "AI Word Prediction", prefs.aiEnabled && prefs.aiConsent,
+                subtitle = "Context-aware words, fixes & phrases") { on ->
+                if (on && !prefs.aiConsent) {
+                    // Show the disclosure; the switch only turns on if the user agrees.
+                    startActivity(ConsentActivity.intent(this@SettingsActivity, ConsentActivity.MODE_AI))
+                } else putBool(Prefs.AI_ENABLED, on)
+            }
             val provE = listOf("Anthropic Claude", "OpenAI-Compatible"); val provV = listOf("anthropic", "openai")
             navRow(null, 0, "Provider", label(provE, provV, prefs.aiProvider)) {
                 choicePage("Provider", provE, provV, Prefs.AI_PROVIDER, "anthropic",
@@ -337,6 +342,18 @@ class SettingsActivity : AppCompatActivity() {
         l.section("Clipboard") {
             switchRow(Icons.Kind.CLIPBOARD, yellow, "Clipboard History", prefs.clipboardHistory,
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
+        }
+
+        if (prefs.aiConsent) l.section(footer = "Stops all AI features and sends nothing further to your AI provider until you agree again.") {
+            actionRow("Withdraw AI Consent", p.red) {
+                sp.edit().putBoolean(Prefs.AI_CONSENT, false).putBoolean(Prefs.AI_ENABLED, false).apply()
+                toast("AI features turned off")
+                refreshMain()
+            }
+        }
+
+        l.section("Privacy", "Everything you type stays on this phone unless you turn on AI features.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { ConsentActivity.openPrivacyPolicy(this@SettingsActivity) }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
@@ -464,6 +481,8 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Pick up changes made elsewhere (consent screen, keyboard ✨ button).
+        if (stack.size == 1 && ::container.isInitialized) refreshMain()
         updateStatus()
         if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) {
             intent.removeExtra(EXTRA_REQUEST_MIC)

@@ -25,7 +25,7 @@ class AiPredictor(private val prefs: Prefs) {
         private set
 
     val isConfigured: Boolean
-        get() = prefs.aiEnabled && prefs.aiKey.isNotEmpty() && prefs.aiModel.isNotEmpty()
+        get() = prefs.aiConsent && prefs.aiEnabled && prefs.aiKey.isNotEmpty() && prefs.aiModel.isNotEmpty()
 
     fun cached(context: String, lang: String): Prediction? = synchronized(cache) { cache["$lang|$context"] }
 
@@ -69,6 +69,7 @@ class AiPredictor(private val prefs: Prefs) {
      * Needs an API key but works even when word prediction is switched off.
      */
     suspend fun transform(text: String, instruction: String): String = withContext(Dispatchers.IO) {
+        check(prefs.aiConsent) { "AI features need your consent in Settings" }
         val system = """
             You are a writing tool inside a smartphone keyboard. $instruction
             Reply with ONLY the resulting text: no quotes, no explanations, no notes.

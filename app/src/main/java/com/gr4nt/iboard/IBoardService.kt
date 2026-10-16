@@ -419,6 +419,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     /** ✨ in the capsule opens the AI menu (or settings if no API key is set yet). */
     private fun toggleAi() {
+        if (!prefs.aiConsent) {
+            // Prominent disclosure first: nothing is sent until the user agrees.
+            startActivity(com.gr4nt.iboard.settings.ConsentActivity.intent(this, com.gr4nt.iboard.settings.ConsentActivity.MODE_AI)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
         if (prefs.aiKey.isEmpty()) {
             Toast.makeText(this, "Add an AI API key in iBoard settings to use AI features", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -930,9 +936,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun toggleVoice() {
         if (listening) { stopVoice(); return }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Allow microphone access for voice typing", Toast.LENGTH_LONG).show()
-            startActivity(Intent(this, SettingsActivity::class.java)
-                .putExtra(SettingsActivity.EXTRA_REQUEST_MIC, true)
+            startActivity(com.gr4nt.iboard.settings.ConsentActivity.intent(this, com.gr4nt.iboard.settings.ConsentActivity.MODE_MIC)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
