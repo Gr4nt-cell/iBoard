@@ -18,6 +18,7 @@ Builds are signed with the same key every time, so new versions install over old
   - On-device: 40,000-word frequency dictionary per language, keyboard-aware typo correction, accent fixing (`cafe` → `café`), and next-word prediction that learns from how you type (stored only on the phone).
   - AI (optional): context-aware next words, corrections that use the whole sentence (`I want to by` → `buy`), and phrase completion. Works with Anthropic Claude or any OpenAI-compatible API (OpenAI, Gemini, Groq, OpenRouter…). Never runs in password or incognito fields.
   - Autocorrect on space, tap ⌫ right after to undo it.
+- **Offline Dictation** — download once in Settings › Offline Dictation and dictate with no internet: Whisper speech recognition runs on the phone, and a Rambler-style clean-up removes "um"s and repeats, applies corrections ("Tuesday, no wait, Wednesday"), and with the optional Qwen2.5 writing model rewrites rambles into polished text.
 - **Clipboard** — history of the last 40 copies, pinning, a one-tap "paste" chip for something you just copied.
 - **Emoji** — iOS-style emoji keyboard with Search Emoji, category bar, frequently used and remembered skin tones. Emoji in the keyboard are drawn with glossy 3D art from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT); flags use the phone's font. Generated with `tools/gen_emoji3d.py`.
 - **Languages** — English, Español, Français (AZERTY), Português, Deutsch (QWERTZ), العربية. Tap 🌐 to switch; long-press 🌐 for other keyboards.
