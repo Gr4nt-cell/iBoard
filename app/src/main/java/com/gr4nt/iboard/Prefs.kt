@@ -93,6 +93,7 @@ class Prefs(context: Context) {
         const val ACCENT_COLOR = "accent_color"
         const val VOICE_TYPING = "voice_typing"
         const val BG_OPACITY = "bg_opacity"
+        const val HIDE_ICON = "hide_app_icon"
 
         const val DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
         val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")

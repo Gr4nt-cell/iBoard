@@ -212,6 +212,21 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
             true
         }
+        findPreference<androidx.preference.SwitchPreferenceCompat>(Prefs.HIDE_ICON)?.setOnPreferenceChangeListener { _, value ->
+            val hide = value == true
+            requireContext().packageManager.setComponentEnabledSetting(
+                android.content.ComponentName(requireContext(), "com.gr4nt.iboard.Launcher"),
+                if (hide) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP,
+            )
+            Toast.makeText(
+                requireContext(),
+                if (hide) "Icon hidden. Reopen from Settings › System › Keyboard › iBoard" else "Icon restored",
+                Toast.LENGTH_LONG,
+            ).show()
+            true
+        }
         findPreference<Preference>("clear_learned")?.setOnPreferenceClickListener {
             IBoardService.resetLearned(requireContext())
             Toast.makeText(requireContext(), "Learned words cleared", Toast.LENGTH_SHORT).show()

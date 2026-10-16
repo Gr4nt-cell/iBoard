@@ -91,6 +91,12 @@
             app:summary="Keep the last 40 copied items; tap the clipboard icon on the suggestion bar" app:defaultValue="true" app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="App" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat app:key="hide_app_icon" app:title="Hide app icon"
+            app:summary="Remove iBoard from the app drawer. Open these settings later from Settings › System › Keyboard › iBoard."
+            app:defaultValue="false" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="About" app:iconSpaceReserved="false">
         <Preference app:key="about" app:title="iBoard" app:selectable="false" app:iconSpaceReserved="false" />
     </PreferenceCategory>
