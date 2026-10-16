@@ -23,7 +23,10 @@ import com.gr4nt.iboard.KeyboardTheme
 import com.gr4nt.iboard.withAlpha
 import java.util.concurrent.Executors
 
-/** An iOS-style emoji keyboard: horizontally scrolling pages, category bar, skin tones. */
+/**
+ * iOS-style emoji keyboard: "Search Emoji" field, horizontally paged grid with section titles,
+ * category bar with ABC and delete, long-press skin tones. Emoji are drawn with bundled 3D art.
+ */
 @SuppressLint("ViewConstructor")
 class EmojiPanel(
     context: Context,
@@ -37,6 +40,7 @@ class EmojiPanel(
         fun onBackspace(repeat: Int)
         fun onAbc()
         fun onFeedback()
+        fun onSearch()
     }
 
     private val d = resources.displayMetrics.density
@@ -55,24 +59,32 @@ class EmojiPanel(
     private data class Cell(val emoji: Emoji?, val category: Int)
 
     init {
+        val searchH = (44 * d).toInt()
         val bottomBarH = (44 * d).toInt()
-        val titleH = (26 * d).toInt()
-        val gridH = panelHeight - bottomBarH - titleH
+        val titleH = (22 * d).toInt()
+        val gridH = panelHeight - searchH - bottomBarH - titleH
 
         val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+        // "Search Emoji" pill, like iOS
+        val search = SearchPill(context)
+        search.setOnClickListener { listener.onFeedback(); listener.onSearch() }
+        column.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, searchH).apply {
+            setMargins((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), 0)
+        })
+
         title.apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(theme.keySubText)
-            letterSpacing = 0.04f
+            letterSpacing = 0.05f
             gravity = Gravity.CENTER_VERTICAL
-            setPadding((14 * d).toInt(), (4 * d).toInt(), 0, 0)
+            setPadding((14 * d).toInt(), 0, 0, 0)
             text = EmojiData.CATEGORY_NAMES[1]
         }
         column.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, titleH))
 
-        val cellSize = gridH / rows
-        adapter.cellSize = cellSize
+        adapter.cellSize = gridH / rows
         grid.layoutManager = layoutManager
         grid.adapter = adapter
         grid.setPadding((6 * d).toInt(), 0, (6 * d).toInt(), 0)
@@ -90,28 +102,28 @@ class EmojiPanel(
         val abc = TextView(context).apply {
             text = "ABC"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(theme.keyText)
             gravity = Gravity.CENTER
-            background = pill(theme.specialFill)
             setOnClickListener { listener.onFeedback(); listener.onAbc() }
         }
-        bar.addView(abc, LinearLayout.LayoutParams((54 * d).toInt(), (34 * d).toInt()).apply {
-            marginStart = (6 * d).toInt()
+        bar.addView(abc, LinearLayout.LayoutParams((52 * d).toInt(), (36 * d).toInt()).apply {
+            marginStart = (4 * d).toInt()
         })
         categoryBar.onPick = { cat -> scrollToCategory(cat) }
         bar.addView(categoryBar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-        val del = IconButton(context, Icons.Kind.BACKSPACE, theme.keyText, theme.specialFill)
+        val del = IconButton(context, Icons.Kind.BACKSPACE, theme.keyText, null)
         del.setOnTouchListener(RepeatListener())
-        bar.addView(del, LinearLayout.LayoutParams((54 * d).toInt(), (34 * d).toInt()).apply {
-            marginEnd = (6 * d).toInt()
+        bar.addView(del, LinearLayout.LayoutParams((52 * d).toInt(), (36 * d).toInt()).apply {
+            marginEnd = (4 * d).toInt()
         })
         column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, bottomBarH))
         addView(column, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight))
 
         toneOverlay.apply {
             orientation = LinearLayout.HORIZONTAL
-            background = pill(theme.bubbleFill, 14f)
-            elevation = 8 * d
+            background = GradientDrawable().apply { setColor(theme.bubbleFill); cornerRadius = 16 * d }
+            elevation = 10 * d
             visibility = GONE
             setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
         }
@@ -131,15 +143,14 @@ class EmojiPanel(
     private fun build(cats: List<List<Emoji>>, recents: List<String>) {
         val list = ArrayList<Cell>()
         val starts = IntArray(9)
-        val skinLookup = HashMap<String, Emoji>()
-        cats.forEach { c -> c.forEach { skinLookup[it.text] = it } }
+        val lookup = HashMap<String, Emoji>()
+        cats.forEach { c -> c.forEach { lookup[it.text] = it } }
         fun section(index: Int, items: List<Emoji>) {
             starts[index] = list.size
             items.forEach { list += Cell(it, index) }
-            // Each category begins on a fresh column, like iOS.
             while (list.size % rows != 0) list += Cell(null, index)
         }
-        val recentEmoji = recents.map { r -> skinLookup[r] ?: Emoji(r, false, "") }
+        val recentEmoji = recents.map { r -> lookup[r] ?: Emoji(r, false, "") }
         section(0, if (recentEmoji.isEmpty()) cats[0].take(20) else recentEmoji)
         cats.forEachIndexed { i, c -> section(i + 1, c) }
         cells = list
@@ -168,9 +179,12 @@ class EmojiPanel(
         }
     }
 
-    private fun commit(e: Emoji) {
+    private fun shown(e: Emoji): String {
         val tone = if (e.skin) history.tone(e.text)?.takeIf { it.isNotEmpty() } else null
-        val text = EmojiData.withTone(e.text, tone)
+        return EmojiData.withTone(e.text, tone)
+    }
+
+    private fun commit(text: String) {
         listener.onFeedback()
         listener.onEmoji(text)
         history.record(text)
@@ -179,19 +193,14 @@ class EmojiPanel(
     private fun showTones(anchor: View, e: Emoji) {
         toneOverlay.removeAllViews()
         val options = listOf<String?>(null) + EmojiData.TONES
-        val size = (44 * d).toInt()
+        val size = (46 * d).toInt()
         for (t in options) {
-            val v = TextView(context).apply {
-                text = EmojiData.withTone(e.text, t)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
-                gravity = Gravity.CENTER
+            val v = EmojiCell(context).apply {
+                emoji = EmojiData.withTone(e.text, t)
                 setOnClickListener {
                     history.setTone(e.text, t)
                     toneOverlay.visibility = GONE
-                    listener.onFeedback()
-                    val out = EmojiData.withTone(e.text, t)
-                    listener.onEmoji(out)
-                    history.record(out)
+                    commit(emoji)
                     adapter.notifyDataSetChanged()
                 }
             }
@@ -223,35 +232,27 @@ class EmojiPanel(
         return super.onInterceptTouchEvent(ev)
     }
 
-    private fun pill(color: Int, r: Float = 9f) = GradientDrawable().apply {
-        setColor(color); cornerRadius = r * d
-    }
-
     private inner class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var cellSize = 0
         override fun getItemCount() = cells.size
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-            val tv = TextView(parent.context).apply {
-                gravity = Gravity.CENTER
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, cellSize * 0.62f)
-                includeFontPadding = false
-                layoutParams = RecyclerView.LayoutParams((cellSize * 1.08f).toInt(), cellSize)
+            val v = EmojiCell(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams((cellSize * 1.06f).toInt(), cellSize)
             }
-            return object : RecyclerView.ViewHolder(tv) {}
+            return object : RecyclerView.ViewHolder(v) {}
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val tv = holder.itemView as TextView
+            val v = holder.itemView as EmojiCell
             val e = cells[position].emoji
             if (e == null) {
-                tv.text = ""; tv.setOnClickListener(null); tv.setOnLongClickListener(null); tv.background = null
+                v.emoji = ""; v.setOnClickListener(null); v.setOnLongClickListener(null); v.isClickable = false
                 return
             }
-            val tone = if (e.skin) history.tone(e.text)?.takeIf { it.isNotEmpty() } else null
-            tv.text = EmojiData.withTone(e.text, tone)
-            tv.contentDescription = e.name
-            tv.setOnClickListener { commit(e) }
-            if (e.skin) tv.setOnLongClickListener { showTones(it, e); true } else tv.setOnLongClickListener(null)
+            v.emoji = shown(e)
+            v.contentDescription = e.name
+            v.setOnClickListener { commit(v.emoji) }
+            if (e.skin) v.setOnLongClickListener { showTones(it, e); true } else v.setOnLongClickListener(null)
         }
     }
 
@@ -281,7 +282,44 @@ class EmojiPanel(
         }
     }
 
-    /** Row of grey category icons at the bottom, with the active one highlighted. */
+    /** One emoji, drawn with 3D art (or the font for flags), slightly shrunk while pressed. */
+    private inner class EmojiCell(context: Context) : View(context) {
+        var emoji: String = ""
+            set(v) { field = v; invalidate() }
+
+        init { isClickable = true }
+
+        override fun onDraw(canvas: Canvas) {
+            if (emoji.isEmpty()) return
+            val size = minOf(width, height) * if (isPressed) 0.66f else 0.74f
+            EmojiImages.draw(context, canvas, emoji, width / 2f, height / 2f, size)
+        }
+
+        override fun drawableStateChanged() {
+            super.drawableStateChanged(); invalidate()
+        }
+    }
+
+    /** The rounded "Search Emoji" field. Tapping it opens search above the letter keys. */
+    private inner class SearchPill(context: Context) : View(context) {
+        private val bg = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 16 * resources.displayMetrics.scaledDensity }
+
+        init { isClickable = true }
+
+        override fun onDraw(canvas: Canvas) {
+            val h = height - 6 * d
+            val top = 3 * d
+            bg.color = if (theme.dark) 0x33FFFFFF else 0xCCFFFFFF.toInt()
+            canvas.drawRoundRect(0f, top, width.toFloat(), top + h, h / 2f, h / 2f, bg)
+            val cy = top + h / 2f
+            Icons.draw(canvas, Icons.Kind.SEARCH, 22 * d, cy, 16 * d, theme.keySubText)
+            text.color = theme.keySubText
+            canvas.drawText("Search Emoji", 38 * d, cy - (text.descent() + text.ascent()) / 2f, text)
+        }
+    }
+
+    /** Grey category icons along the bottom; the active one sits in a soft circle. */
     private inner class CategoryBar(context: Context) : View(context) {
         var active = 1
             set(v) { field = v; invalidate() }
@@ -298,11 +336,11 @@ class EmojiPanel(
             kinds.forEachIndexed { i, k ->
                 val cx = w * i + w / 2f
                 if (i == active) {
-                    sel.color = theme.keyFill
-                    canvas.drawCircle(cx, cy, minOf(w, height.toFloat()) * 0.42f, sel)
+                    sel.color = if (theme.dark) 0x40FFFFFF else 0x1A000000
+                    canvas.drawCircle(cx, cy, minOf(w, height.toFloat()) * 0.44f, sel)
                 }
-                val color = if (i == active) theme.keyText else theme.keySubText.withAlpha(0.8f)
-                Icons.draw(canvas, k, cx, cy, minOf(w * 0.55f, 19 * d), color)
+                val color = if (i == active) theme.keyText else theme.keySubText.withAlpha(0.85f)
+                Icons.draw(canvas, k, cx, cy, minOf(w * 0.55f, 18 * d), color)
             }
         }
 

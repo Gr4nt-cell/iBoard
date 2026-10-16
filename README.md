@@ -19,7 +19,7 @@ Builds are signed with the same key every time, so new versions install over old
   - AI (optional): context-aware next words, corrections that use the whole sentence (`I want to by` → `buy`), and phrase completion. Works with Anthropic Claude or any OpenAI-compatible API (OpenAI, Gemini, Groq, OpenRouter…). Never runs in password or incognito fields.
   - Autocorrect on space, tap ⌫ right after to undo it.
 - **Clipboard** — history of the last 40 copies, pinning, a one-tap "paste" chip for something you just copied.
-- **Emoji** — full emoji keyboard with iOS's category order, frequently used, and remembered skin tones. Emoji are drawn with your phone's emoji font.
+- **Emoji** — iOS-style emoji keyboard with Search Emoji, category bar, frequently used and remembered skin tones. Emoji in the keyboard are drawn with glossy 3D art from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT); flags use the phone's font. Generated with `tools/gen_emoji3d.py`.
 - **Languages** — English, Español, Français (AZERTY), Português, Deutsch (QWERTZ), العربية. Tap 🌐 to switch; long-press 🌐 for other keyboards.
 - iOS touches: double-space for a period, auto-capitalization, hold space to move the cursor, hold ⌫ to delete words, return key labelled go / search / send.
 

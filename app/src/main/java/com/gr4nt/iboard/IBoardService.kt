@@ -177,6 +177,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         shift = ShiftState.OFF
         lastAutoCorrect = null
         spaceAutoInserted = false
+        endEmojiSearch()
         closePanels()
         setLanguage(prefs.currentLanguage, rebuild = false)
         updateLayout()
@@ -188,6 +189,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         super.onFinishInputView(finishingInput)
         aiJob?.cancel()
         stopVoice()
+        endEmojiSearch()
         keyboard?.cancelTouches()
         suggester?.user?.save()
     }
@@ -246,6 +248,19 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     // ------------------------------------------------------------ KeyboardView.Listener
 
     override fun onKey(key: Key) {
+        if (emojiQuery != null) {
+            when (key.type) {
+                KeyType.CHAR -> { emojiQuery!!.append(key.label.lowercase()); searchEmoji() }
+                KeyType.SPACE -> { emojiQuery!!.append(' '); searchEmoji() }
+                KeyType.RETURN, KeyType.EMOJI -> { endEmojiSearch(); showEmoji() }
+                KeyType.TO_SYMBOLS -> setPage(Page.SYMBOLS)
+                KeyType.TO_LETTERS -> setPage(Page.LETTERS)
+                KeyType.TO_MORE_SYMBOLS -> setPage(Page.MORE_SYMBOLS)
+                KeyType.GLOBE -> nextLanguage()
+                else -> {}
+            }
+            return
+        }
         when (key.type) {
             KeyType.CHAR -> typeText(key.label)
             KeyType.SPACE -> onSpace()
@@ -261,7 +276,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
     }
 
-    override fun onText(text: String) = typeText(text)
+    override fun onText(text: String) {
+        val q = emojiQuery
+        if (q != null) { q.append(text.lowercase()); searchEmoji(); return }
+        typeText(text)
+    }
 
     override fun onShift(doubleTap: Boolean) {
         if (lang == "ar") return
@@ -274,6 +293,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onBackspace(repeat: Int) {
+        emojiQuery?.let { q ->
+            if (q.isNotEmpty()) { q.setLength(q.length - 1); searchEmoji() }
+            return
+        }
         val ic = currentInputConnection ?: return
         spaceAutoInserted = false
         val selected = ic.getSelectedText(0)
@@ -372,6 +395,54 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onKeyFeedback(key: Key) = feedback(key.type)
+
+    override fun onEmojiResult(text: String) {
+        feedback(KeyType.CHAR)
+        currentInputConnection?.commitText(text, 1)
+        com.gr4nt.iboard.emoji.EmojiHistory(this).record(text)
+    }
+
+    override fun onEmojiSearchClose() {
+        feedback(KeyType.CHAR)
+        endEmojiSearch()
+        showEmoji()
+    }
+
+    // ------------------------------------------------------------ emoji search
+
+    private var emojiQuery: StringBuilder? = null
+    private var emojiSearchJob: Job? = null
+
+    private fun startEmojiSearch() {
+        closePanels()
+        emojiQuery = StringBuilder()
+        aiJob?.cancel()
+        page = Page.LETTERS
+        shift = ShiftState.OFF
+        updateLayout()
+        keyboard?.emojiQuery = ""
+        searchEmoji()
+    }
+
+    private fun searchEmoji() {
+        val q = emojiQuery?.toString() ?: return
+        keyboard?.emojiQuery = q
+        emojiSearchJob?.cancel()
+        emojiSearchJob = scope.launch {
+            val results = withContext(Dispatchers.Default) {
+                if (q.isBlank()) com.gr4nt.iboard.emoji.EmojiHistory(this@IBoardService).recents(10)
+                else com.gr4nt.iboard.emoji.EmojiData.search(this@IBoardService, q)
+            }
+            if (emojiQuery?.toString() == q) keyboard?.emojiResults = results
+        }
+    }
+
+    private fun endEmojiSearch() {
+        emojiQuery = null
+        emojiSearchJob?.cancel()
+        keyboard?.emojiResults = emptyList()
+        keyboard?.emojiQuery = null
+    }
 
     // ------------------------------------------------------------ typing
 
@@ -500,6 +571,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun refresh() {
+        if (emojiQuery != null) return
         refreshShift()
         refreshSuggestions()
     }
@@ -644,6 +716,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             override fun onBackspace(repeat: Int) = this@IBoardService.onBackspace(minOf(repeat, 10))
             override fun onAbc() = closePanels()
             override fun onFeedback() = feedback(KeyType.CHAR)
+            override fun onSearch() = startEmojiSearch()
         })
         emojiPanel = panel
         keyboard?.visibility = View.GONE

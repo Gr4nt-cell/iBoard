@@ -41,6 +41,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onClipboardButton()
         fun onAiButton()
         fun onKeyFeedback(key: Key)
+        fun onEmojiResult(text: String)
+        fun onEmojiSearchClose()
     }
 
     private val d = resources.displayMetrics.density
@@ -102,7 +104,19 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     // --- geometry ---
-    private val stripH = 44 * d
+    /** The bar grows to two rows (search field + results) while searching emoji. */
+    private val stripH get() = if (emojiQuery != null) 98 * d else 44 * d
+
+    /** Non-null while the user is searching emoji; typed letters go into this query. */
+    var emojiQuery: String? = null
+        set(v) {
+            val resize = (field == null) != (v == null)
+            field = v
+            if (resize) { requestLayout(); computeKeys() }
+            invalidate()
+        }
+    var emojiResults: List<String> = emptyList()
+        set(v) { field = v; invalidate() }
     private val sidePad = 3 * d
     private val keyGap = 6 * d
     private val rowGap = 10 * d
@@ -110,7 +124,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private val bottomPad = 6 * d
     private var keyH = 45 * d
     private var numKeyH = 38 * d
-    private val utilH = 48 * d
+    private val utilH = 43.6f * d // capsule = utilH - 4dp
     private var radius = 8 * d
     private var textScale = 1f
 
@@ -496,7 +510,63 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         return widths.map { w -> RectF(x, 0f, x + w, stripH).also { x += w } }
     }
 
+    private fun drawEmojiSearch(canvas: Canvas, query: String) {
+        val rowH = 50 * d
+        val pillH = 36 * d
+        val top = (rowH - pillH) / 2f + 2 * d
+        val right = width - 50 * d
+        fillPaint.color = if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
+        tmpRect.set(8 * d, top, right, top + pillH)
+        canvas.drawRoundRect(tmpRect, pillH / 2f, pillH / 2f, fillPaint)
+        val cy = top + pillH / 2f
+        Icons.draw(canvas, Icons.Kind.SEARCH, 26 * d, cy, 16 * d, theme.keySubText)
+        stripPaint.textAlign = Paint.Align.LEFT
+        stripPaint.typeface = regular
+        val tx = 42 * d
+        if (query.isEmpty()) {
+            stripPaint.color = theme.keySubText
+            canvas.drawText("Search Emoji", tx, baseline(cy, stripPaint), stripPaint)
+            fillPaint.color = theme.accent
+            canvas.drawRect(tx - 1.5f * d, cy - 10 * d, tx, cy + 10 * d, fillPaint)
+        } else {
+            stripPaint.color = theme.stripText
+            val shownText = TextUtils.ellipsize(query, stripPaint, right - tx - 16 * d, TextUtils.TruncateAt.START).toString()
+            canvas.drawText(shownText, tx, baseline(cy, stripPaint), stripPaint)
+            val end = tx + stripPaint.measureText(shownText) + 2 * d
+            fillPaint.color = theme.accent
+            canvas.drawRect(end, cy - 10 * d, end + 1.5f * d, cy + 10 * d, fillPaint)
+        }
+        stripPaint.textAlign = Paint.Align.CENTER
+        // close (×)
+        val cx = width - 26 * d
+        fillPaint.color = if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
+        canvas.drawCircle(cx, cy, 16 * d, fillPaint)
+        strokePaint.color = theme.keyText
+        val old = strokePaint.strokeWidth
+        strokePaint.strokeWidth = 2 * d
+        canvas.drawLine(cx - 5 * d, cy - 5 * d, cx + 5 * d, cy + 5 * d, strokePaint)
+        canvas.drawLine(cx + 5 * d, cy - 5 * d, cx - 5 * d, cy + 5 * d, strokePaint)
+        strokePaint.strokeWidth = old
+        // results
+        val cell = 46 * d
+        val ry = rowH + (stripH - rowH) / 2f
+        if (emojiResults.isEmpty() && query.isNotEmpty()) {
+            stripPaint.color = theme.keySubText
+            canvas.drawText("No emoji found", width / 2f, baseline(ry, stripPaint), stripPaint)
+        }
+        emojiResults.forEachIndexed { i, e ->
+            val x = 8 * d + cell * i + cell / 2f
+            if (x + cell / 2f > width) return
+            if (stripPressed == 200 + i) {
+                fillPaint.color = theme.keyFillPressed
+                canvas.drawCircle(x, ry, cell * 0.46f, fillPaint)
+            }
+            com.gr4nt.iboard.emoji.EmojiImages.draw(context, canvas, e, x, ry, cell * 0.72f)
+        }
+    }
+
     private fun drawStrip(canvas: Canvas) {
+        emojiQuery?.let { drawEmojiSearch(canvas, it); return }
         statusText?.let { msg ->
             stripPaint.typeface = medium
             stripPaint.color = theme.stripText
@@ -580,7 +650,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 val x = e.getX(idx)
                 val y = e.getY(idx)
                 if (y < stripH) {
-                    if (e.actionMasked == MotionEvent.ACTION_DOWN) stripPressed = stripHit(x)
+                    if (e.actionMasked == MotionEvent.ACTION_DOWN) stripPressed = stripHit(x, y)
                     invalidate()
                     return true
                 }
@@ -606,7 +676,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (stripPressed != -2 && e.actionMasked == MotionEvent.ACTION_UP) {
-                    val hitSlot = stripHit(e.getX(idx))
+                    val hitSlot = stripHit(e.getX(idx), e.getY(idx))
                     if (hitSlot == stripPressed && e.getY(idx) < stripH * 1.5f) onStripTap(hitSlot)
                     stripPressed = -2
                     invalidate()
@@ -625,7 +695,13 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         return true
     }
 
-    private fun stripHit(x: Float): Int {
+    private fun stripHit(x: Float, y: Float): Int {
+        if (emojiQuery != null) {
+            val rowH = 50 * d
+            if (y < rowH) return if (x > width - 50 * d) 100 else -2
+            val i = ((x - 8 * d) / (46 * d)).toInt()
+            return if (i in emojiResults.indices) 200 + i else -2
+        }
         if (statusText != null) return -2
         if (look.stripIcons && x < iconW + 4 * d) return -1
         if (look.stripIcons && x > width - iconW - 4 * d) return 3
@@ -636,6 +712,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun onStripTap(slot: Int) {
         when (slot) {
+            100 -> listener.onEmojiSearchClose()
+            in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
             -1 -> listener.onClipboardButton()
             3 -> listener.onAiButton()
             in 0..2 -> {
