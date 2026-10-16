@@ -21,7 +21,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.13'
 
       - name: Build APK
         run: |
@@ -43,10 +43,31 @@ jobs:
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk iBoard.apk
 
+      - name: Build Play bundle (.aab)
+        env:
+          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
+            echo "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            export UPLOAD_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
+            NAME=iBoard-signed.aab
+          else
+            export IBOARD_UNSIGNED=1
+            NAME=iBoard-unsigned.aab
+          fi
+          gradle :app:bundleRelease --stacktrace
+          cp app/build/outputs/bundle/release/app-release.aab "$NAME"
+          echo "AAB_NAME=$NAME" >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@v4
         with:
           name: iBoard-apk
-          path: iBoard.apk
+          path: |
+            iBoard.apk
+            ${{ env.AAB_NAME }}
 
       - name: Publish "latest" release
         if: github.ref == 'refs/heads/main'
@@ -54,7 +75,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest iBoard.apk \
+          gh release create latest iBoard.apk "$AAB_NAME" \
             --title "iBoard build #${{ github.run_number }}" \
             --notes "Automatic build from ${{ github.sha }}. Download iBoard.apk below and install it on your Android phone." \
             --prerelease --target "${{ github.sha }}"

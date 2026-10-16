@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.gr4nt.iboard"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.gr4nt.iboard"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
@@ -22,6 +22,15 @@ android {
             keyAlias = "iboard"
             keyPassword = "iboard123"
         }
+        // Google Play upload key, only when provided through the environment (never committed).
+        System.getenv("UPLOAD_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { path ->
+            create("upload") {
+                storeFile = file(path)
+                storePassword = System.getenv("UPLOAD_STORE_PASSWORD")
+                keyAlias = System.getenv("UPLOAD_KEY_ALIAS") ?: "upload"
+                keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -30,7 +39,13 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("iboard")
+            // Sideload APK: fixed iboard key. Play bundle: upload key if given, otherwise left unsigned
+            // (IBOARD_UNSIGNED=1) so it can be signed with the upload key afterwards.
+            signingConfig = when {
+                signingConfigs.findByName("upload") != null -> signingConfigs.getByName("upload")
+                System.getenv("IBOARD_UNSIGNED") == "1" -> null
+                else -> signingConfigs.getByName("iboard")
+            }
         }
     }
 
