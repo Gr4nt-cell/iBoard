@@ -21,6 +21,7 @@ import com.gr4nt.iboard.clipboard.ClipboardPanel
 import com.gr4nt.iboard.clipboard.ClipboardStore
 import com.gr4nt.iboard.emoji.EmojiPanel
 import com.gr4nt.iboard.predict.AiPredictor
+import com.gr4nt.iboard.predict.Dictation
 import com.gr4nt.iboard.predict.Dictionary
 import com.gr4nt.iboard.predict.Suggester
 import com.gr4nt.iboard.predict.Suggestion
@@ -931,7 +932,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     // ------------------------------------------------------------ voice typing
 
     private var voice: android.speech.SpeechRecognizer? = null
-    private var listening = false
+    private var listening = false   // the user has dictation switched on (until they tap 🎤 again or go quiet)
+    private var dictationChain: Job? = null
 
     private fun toggleVoice() {
         if (listening) { stopVoice(); return }
@@ -944,28 +946,36 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             Toast.makeText(this, "No speech recognition service on this phone", Toast.LENGTH_LONG).show()
             return
         }
+        listening = true
+        keyboard?.listening = true
+        keyboard?.statusText = "Starting…"
+        listenOnce()
+    }
+
+    /** One recognition pass; keeps going pass after pass, like iOS, until the user stops or stays quiet. */
+    private fun listenOnce() {
         val r = voice ?: android.speech.SpeechRecognizer.createSpeechRecognizer(this).also { voice = it }
         r.setRecognitionListener(object : android.speech.RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) { keyboard?.statusText = "Listening…" }
+            override fun onReadyForSpeech(params: android.os.Bundle?) { if (listening) keyboard?.statusText = "Listening…" }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { keyboard?.statusText = "…" }
+            override fun onEndOfSpeech() { if (listening) keyboard?.statusText = "…" }
             override fun onError(error: Int) {
                 if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
                     error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
                     error != android.speech.SpeechRecognizer.ERROR_CLIENT
                 ) Toast.makeText(this@IBoardService, "Voice typing error ($error)", Toast.LENGTH_SHORT).show()
-                endVoice()
+                endVoice() // silence or failure ends dictation
             }
             override fun onResults(results: android.os.Bundle?) {
                 val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 if (!text.isNullOrBlank()) commitDictation(text)
-                endVoice()
+                if (listening) keyboard?.postDelayed({ if (listening) listenOnce() }, 150) else endVoice()
             }
             override fun onPartialResults(partial: android.os.Bundle?) {
                 val text = partial?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (!text.isNullOrBlank()) keyboard?.statusText = text
+                if (!text.isNullOrBlank() && listening) keyboard?.statusText = text
             }
             override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
         })
@@ -976,25 +986,52 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, tag)
             .putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        listening = true
-        keyboard?.listening = true
-        keyboard?.statusText = "Starting…"
+            // Ask the recognizer for automatic punctuation and formatting (Android 13+, ignored elsewhere).
+            .putExtra("android.speech.extra.ENABLE_FORMATTING", "quality")
+            .putExtra("android.speech.extra.HIDE_PARTIAL_TRAILING_PUNCTUATION", true)
+            .putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2500L)
+            .putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
         r.startListening(intent)
     }
 
-    private fun commitDictation(text: String) {
-        val ic = currentInputConnection ?: return
-        val before = ic.getTextBeforeCursor(2, 0)?.toString() ?: ""
-        val trimmed = before.trimEnd(' ')
-        val atStart = trimmed.isEmpty() || trimmed.last() in ".!?\n"
-        var out = if (atStart) text.replaceFirstChar { it.titlecase() } else text
-        if (before.isNotEmpty() && !before.last().isWhitespace()) out = " $out"
-        ic.commitText("$out ", 1)
+    /**
+     * Punctuates a dictated segment (spoken commands, capitals, end marks) and, when AI is set up,
+     * lets the model polish punctuation with the surrounding sentence as context. Segments are
+     * committed strictly in the order they were spoken.
+     */
+    private fun commitDictation(raw: String) {
+        val prev = dictationChain
+        dictationChain = scope.launch {
+            prev?.join()
+            val ic = currentInputConnection ?: return@launch
+            val before = ic.getTextBeforeCursor(400, 0)?.toString() ?: ""
+            var out = Dictation.format(raw, lang, before)
+            if (prefs.aiConsent && prefs.aiKey.isNotEmpty() && !password && !incognito) {
+                keyboard?.statusText = "Punctuating…"
+                val context = before.takeLast(300)
+                val polished = kotlinx.coroutines.withTimeoutOrNull(4000) {
+                    try {
+                        ai.transform(out, "The text is dictated speech that will be inserted after: «$context». " +
+                            "Fix its punctuation and capitalization, and correct obvious speech-recognition mistakes using that context. " +
+                            "Keep the same words, meaning and language. Return only the corrected dictated text, without the context.")
+                    } catch (_: Exception) { null }
+                }
+                if (!polished.isNullOrBlank() && polished.length < out.length * 2 + 20) out = polished
+                if (listening) keyboard?.statusText = "Listening…" else keyboard?.statusText = null
+            }
+            val conn = currentInputConnection ?: return@launch
+            val last = conn.getTextBeforeCursor(1, 0)?.toString() ?: ""
+            if (last.isNotEmpty() && !last.last().isWhitespace() && out.firstOrNull()?.let { it.isLetterOrDigit() } == true) out = " $out"
+            conn.commitText(if (out.endsWith("\n")) out else "$out ", 1)
+        }
     }
 
     private fun stopVoice() {
-        if (listening) voice?.stopListening()
-        endVoice()
+        val wasListening = listening
+        listening = false
+        if (wasListening) voice?.stopListening() // final results still arrive and get committed
+        keyboard?.listening = false
+        keyboard?.statusText = null
     }
 
     private fun endVoice() {
