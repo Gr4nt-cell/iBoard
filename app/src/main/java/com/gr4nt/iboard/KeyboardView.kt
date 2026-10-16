@@ -43,6 +43,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onKeyFeedback(key: Key)
         fun onEmojiResult(text: String)
         fun onEmojiSearchClose()
+        fun onChip(index: Int)
     }
 
     private val d = resources.displayMetrics.density
@@ -117,6 +118,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         }
     var emojiResults: List<String> = emptyList()
         set(v) { field = v; invalidate() }
+
+    /** Tappable chips shown in the suggestion bar (the ✨ AI menu, translation targets, undo). */
+    var chips: List<String>? = null
+        set(v) { field = v; invalidate() }
+    /** Index of the chip drawn highlighted (e.g. "Predictions: On"). */
+    var chipAccent = -1
     private val sidePad = 3 * d
     private val keyGap = 6 * d
     private val rowGap = 10 * d
@@ -580,8 +587,28 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         }
     }
 
+    private fun drawChips(canvas: Canvas, list: List<String>) {
+        val pad = 6 * d
+        val w = (width - pad * 2) / list.size
+        stripPaint.typeface = medium
+        list.forEachIndexed { i, c ->
+            val l = pad + w * i
+            tmpRect.set(l + 3 * d, 7 * d, l + w - 3 * d, stripH - 7 * d)
+            fillPaint.color = when {
+                stripPressed == 300 + i -> theme.keyFillPressed
+                i == chipAccent -> theme.accent
+                else -> if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
+            }
+            canvas.drawRoundRect(tmpRect, tmpRect.height() / 2f, tmpRect.height() / 2f, fillPaint)
+            stripPaint.color = if (i == chipAccent && stripPressed != 300 + i) theme.accentText else theme.stripText
+            val label = TextUtils.ellipsize(c, stripPaint, tmpRect.width() - 10 * d, TextUtils.TruncateAt.END).toString()
+            canvas.drawText(label, tmpRect.centerX(), baseline(tmpRect.centerY(), stripPaint), stripPaint)
+        }
+    }
+
     private fun drawStrip(canvas: Canvas) {
         emojiQuery?.let { drawEmojiSearch(canvas, it); return }
+        if (statusText == null) chips?.let { drawChips(canvas, it); return }
         statusText?.let { msg ->
             stripPaint.typeface = medium
             stripPaint.color = theme.stripText
@@ -718,6 +745,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             return if (i in emojiResults.indices) 200 + i else -2
         }
         if (statusText != null) return -2
+        chips?.let { list ->
+            val pad = 6 * d
+            val i = ((x - pad) / ((width - pad * 2) / list.size)).toInt()
+            return if (i in list.indices) 300 + i else -2
+        }
         if (look.stripIcons && x < iconW + 4 * d) return -1
         if (look.stripIcons && x > width - iconW - 4 * d) return 3
         if (suggestions.isEmpty()) return -2
@@ -728,6 +760,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private fun onStripTap(slot: Int) {
         when (slot) {
             100 -> listener.onEmojiSearchClose()
+            in 300..399 -> listener.onChip(slot - 300)
             in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
             -1 -> listener.onClipboardButton()
             3 -> listener.onAiButton()

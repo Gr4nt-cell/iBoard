@@ -276,7 +276,7 @@ class SettingsActivity : AppCompatActivity() {
             switchRow(Icons.Kind.KEYBOARD, gray, "Label on Space Bar", prefs.spaceLabel) { putBool(Prefs.SPACE_LABEL, it) }
         }
 
-        l.section("Icon Capsule", "The glass bar under the keys holds settings, emoji, ✨ AI on/off, clipboard and the dictation mic. Long-press the gear to pick another keyboard.") {
+        l.section("Icon Capsule", "The glass bar under the keys holds settings, emoji, ✨ AI (predictions, Translate, Fix Grammar), clipboard and the dictation mic. Long-press the gear to pick another keyboard.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
             switchRow(Icons.Kind.MIC, red, "Dictation", prefs.voiceTyping) { putBool(Prefs.VOICE_TYPING, it) }
             switchRow(Icons.Kind.SPARKLE, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }

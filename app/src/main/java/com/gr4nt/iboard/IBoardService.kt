@@ -191,6 +191,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         aiJob?.cancel()
         stopVoice()
         endEmojiSearch()
+        transformJob?.cancel()
+        closeMenu()
         keyboard?.cancelTouches()
         suggester?.user?.save()
     }
@@ -249,6 +251,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     // ------------------------------------------------------------ KeyboardView.Listener
 
     override fun onKey(key: Key) {
+        if (menu != Menu.NONE && key.type != KeyType.AI) closeMenu()
         if (emojiQuery != null) {
             when (key.type) {
                 KeyType.CHAR -> { emojiQuery!!.append(key.label.lowercase()); searchEmoji() }
@@ -297,6 +300,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onBackspace(repeat: Int) {
+        if (menu != Menu.NONE) closeMenu()
         emojiQuery?.let { q ->
             if (q.isNotEmpty()) { q.setLength(q.length - 1); searchEmoji() }
             return
@@ -401,16 +405,135 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onKeyFeedback(key: Key) = feedback(key.type)
 
     /** ✨ in the capsule: turns AI predictions on/off, or opens settings if no API key is set yet. */
+    // ------------------------------------------------------------ ✨ AI menu: predictions, translate, fix grammar
+
+    private enum class Menu { NONE, AI, TRANSLATE, UNDO }
+    private var menu = Menu.NONE
+    private var undo: Pair<String, String>? = null // original text, AI result
+    private var transformJob: Job? = null
+
+    private val translateTargets = listOf(
+        "EN" to "English", "ES" to "Spanish", "FR" to "French", "PT" to "Portuguese", "DE" to "German",
+        "AR" to "Arabic", "中文" to "Simplified Chinese", "HI" to "Hindi", "TWI" to "Twi (Akan)",
+    )
+
+    /** ✨ in the capsule opens the AI menu (or settings if no API key is set yet). */
     private fun toggleAi() {
         if (prefs.aiKey.isEmpty()) {
-            Toast.makeText(this, "Add an AI API key in iBoard settings to use AI predictions", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Add an AI API key in iBoard settings to use AI features", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
-        val on = !prefs.aiEnabled
-        prefs.sp.edit().putBoolean(Prefs.AI_ENABLED, on).apply()
-        Toast.makeText(this, if (on) "AI predictions on ✨" else "AI predictions off", Toast.LENGTH_SHORT).show()
-        refresh()
+        if (menu == Menu.AI) { closeMenu(); return }
+        showMenu(Menu.AI)
+    }
+
+    private fun showMenu(m: Menu) {
+        menu = m
+        val kv = keyboard ?: return
+        when (m) {
+            Menu.AI -> {
+                kv.chipAccent = if (prefs.aiEnabled) 0 else -1
+                kv.chips = listOf(if (prefs.aiEnabled) "Predict: On" else "Predict: Off", "Translate", "Fix Grammar", "✕")
+            }
+            Menu.TRANSLATE -> {
+                kv.chipAccent = -1
+                kv.chips = listOf("‹") + translateTargets.map { it.first }
+            }
+            Menu.UNDO -> {
+                kv.chipAccent = 1
+                kv.chips = listOf("↶ Undo", "Done")
+            }
+            Menu.NONE -> kv.chips = null
+        }
+    }
+
+    private fun closeMenu() {
+        menu = Menu.NONE
+        undo = null
+        keyboard?.chips = null
+    }
+
+    override fun onChip(index: Int) {
+        feedback(KeyType.CHAR)
+        when (menu) {
+            Menu.AI -> when (index) {
+                0 -> {
+                    val on = !prefs.aiEnabled
+                    prefs.sp.edit().putBoolean(Prefs.AI_ENABLED, on).apply()
+                    showMenu(Menu.AI)
+                    refresh()
+                }
+                1 -> showMenu(Menu.TRANSLATE)
+                2 -> runTransform("Correct the spelling, grammar and punctuation. Do not change the meaning or language.", "Fixing…")
+                else -> closeMenu()
+            }
+            Menu.TRANSLATE -> {
+                if (index == 0) { showMenu(Menu.AI); return }
+                val (_, language) = translateTargets.getOrNull(index - 1) ?: return
+                runTransform("Translate the text into $language. If it is already in $language, return it unchanged.",
+                    "Translating to $language…")
+            }
+            Menu.UNDO -> {
+                if (index == 0) undoTransform()
+                closeMenu()
+            }
+            Menu.NONE -> {}
+        }
+    }
+
+    /** Sends the selected text (or the whole field) to the AI and replaces it with the result. */
+    private fun runTransform(instruction: String, status: String) {
+        val ic = currentInputConnection ?: return
+        if (password) { closeMenu(); return }
+        val selected = ic.getSelectedText(0)?.toString().orEmpty()
+        val before = ic.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
+        val after = ic.getTextAfterCursor(8000, 0)?.toString().orEmpty()
+        val source = selected.ifEmpty { before + after }
+        if (source.isBlank()) {
+            Toast.makeText(this, "Type or select some text first", Toast.LENGTH_SHORT).show()
+            closeMenu(); return
+        }
+        val kv = keyboard ?: return
+        kv.chips = null
+        kv.statusText = status
+        kv.aiBusy = true
+        transformJob?.cancel()
+        transformJob = scope.launch {
+            var err: String? = null
+            val result = try { ai.transform(source, instruction) } catch (e: Exception) { err = e.message; null }
+            kv.aiBusy = false
+            kv.statusText = null
+            val conn = currentInputConnection
+            if (result.isNullOrBlank() || conn == null) {
+                Toast.makeText(this@IBoardService, "AI couldn't do that: ${err?.take(120) ?: "no response"}", Toast.LENGTH_LONG).show()
+                closeMenu(); return@launch
+            }
+            conn.beginBatchEdit()
+            if (selected.isNotEmpty()) {
+                conn.commitText(result, 1)
+            } else {
+                // Replace the whole field: text before and after the cursor.
+                val b = conn.getTextBeforeCursor(8000, 0)?.length ?: 0
+                val a = conn.getTextAfterCursor(8000, 0)?.length ?: 0
+                conn.deleteSurroundingText(b, a)
+                conn.commitText(result, 1)
+            }
+            conn.endBatchEdit()
+            undo = source to result
+            showMenu(Menu.UNDO)
+        }
+    }
+
+    private fun undoTransform() {
+        val (original, result) = undo ?: return
+        val ic = currentInputConnection ?: return
+        val before = ic.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
+        if (!before.endsWith(result)) return
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(result.length, 0)
+        ic.commitText(original, 1)
+        ic.endBatchEdit()
     }
 
     override fun onEmojiResult(text: String) {

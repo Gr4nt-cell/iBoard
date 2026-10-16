@@ -64,10 +64,24 @@ class AiPredictor(private val prefs: Prefs) {
             }
         }
 
-    private fun callAnthropic(system: String, user: String): String {
+    /**
+     * Rewrites [text] following [instruction] (translate, fix grammar…). Returns only the new text.
+     * Needs an API key but works even when word prediction is switched off.
+     */
+    suspend fun transform(text: String, instruction: String): String = withContext(Dispatchers.IO) {
+        val system = """
+            You are a writing tool inside a smartphone keyboard. $instruction
+            Reply with ONLY the resulting text: no quotes, no explanations, no notes.
+            Keep emoji, names, numbers, links and line breaks. Match the original tone and formality.
+        """.trimIndent()
+        val out = if (prefs.aiProvider == "anthropic") callAnthropic(system, text, 2000) else callOpenAi(system, text, 2000)
+        out.trim().removeSurrounding("\"").trim()
+    }
+
+    private fun callAnthropic(system: String, user: String, maxTokens: Int = 120): String {
         val body = JSONObject()
             .put("model", prefs.aiModel)
-            .put("max_tokens", 120)
+            .put("max_tokens", maxTokens)
             .put("system", system)
             .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", user)))
         val res = post(
@@ -83,10 +97,10 @@ class AiPredictor(private val prefs: Prefs) {
         return sb.toString()
     }
 
-    private fun callOpenAi(system: String, user: String): String {
+    private fun callOpenAi(system: String, user: String, maxTokens: Int = 120): String {
         val body = JSONObject()
             .put("model", prefs.aiModel)
-            .put("max_tokens", 120)
+            .put("max_tokens", maxTokens)
             .put("temperature", 0.2)
             .put(
                 "messages", JSONArray()
