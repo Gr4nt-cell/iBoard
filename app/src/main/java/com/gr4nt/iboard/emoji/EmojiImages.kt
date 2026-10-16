@@ -22,6 +22,10 @@ object EmojiImages {
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val rect = RectF()
 
+    /** False when the user picked "Phone's emoji font": everything is drawn with the system font. */
+    @Volatile
+    var useArt = true
+
     /** Lists the bundled art once. Safe to call from any thread. */
     fun init(context: Context) {
         if (available != null) return
@@ -45,9 +49,10 @@ object EmojiImages {
         return sb.toString()
     }
 
-    fun has(emoji: String): Boolean = available?.contains(key(emoji)) == true
+    fun has(emoji: String): Boolean = useArt && available?.contains(key(emoji)) == true
 
     fun bitmap(context: Context, emoji: String): Bitmap? {
+        if (!useArt) return null
         val k = key(emoji)
         cache.get(k)?.let { return it }
         if (available?.contains(k) != true) return null

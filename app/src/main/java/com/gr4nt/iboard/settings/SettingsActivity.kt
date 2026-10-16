@@ -223,6 +223,14 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        val emoE = listOf("3D (Built-in)", "Phone's Emoji Font"); val emoV = listOf("3d", "system")
+        l.section("Emoji", "“Phone's Emoji Font” uses whatever emoji font is installed on your phone, so the keyboard matches what you send.") {
+            navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {
+                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "3d",
+                    "3D uses the bundled Fluent emoji art. Phone's Emoji Font uses your system emoji, including any emoji font you've installed.")
+            }
+        }
+
         l.section("Keys") {
             sliderRow(Icons.Kind.HEIGHT, green, "Key Height", 80, 135, 5, prefs.keyHeight, "%") { putInt(Prefs.KEY_HEIGHT, it) }
             sliderRow(Icons.Kind.TEXT_AA, blue, "Letter Size", 80, 130, 5, prefs.keyTextSize, "%") { putInt(Prefs.KEY_TEXT_SIZE, it) }

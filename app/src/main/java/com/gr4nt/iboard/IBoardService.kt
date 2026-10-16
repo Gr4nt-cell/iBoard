@@ -106,6 +106,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onCreateInputView(): View {
         val t = KeyboardTheme.resolve(this, prefs)
         kbTheme = t
+        com.gr4nt.iboard.emoji.EmojiImages.useArt = prefs.emojiStyle != "system"
         val frame = FrameLayout(this)
         // A see-through gradient: the app shows behind the keyboard.
         frame.background = t.backgroundDrawable().apply { alpha = (prefs.bgOpacity.coerceIn(0, 100) * 255) / 100 }

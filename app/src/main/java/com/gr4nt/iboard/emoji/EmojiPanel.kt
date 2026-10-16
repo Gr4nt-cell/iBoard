@@ -45,79 +45,82 @@ class EmojiPanel(
 
     private val d = resources.displayMetrics.density
     private val history = EmojiHistory(context)
-    private val rows = 5
-    private val title = TextView(context)
+    private val columns = 8
     private val grid = RecyclerView(context)
     private val categoryBar = CategoryBar(context)
     private val adapter = Adapter()
-    private val layoutManager = GridLayoutManager(context, rows, GridLayoutManager.HORIZONTAL, false)
-    private var cells: List<Cell> = emptyList()
+    private val layoutManager = GridLayoutManager(context, columns)
+    private var items: List<Item> = emptyList()
     private var sectionStarts = IntArray(9)
     private val toneOverlay = LinearLayout(context)
     private val main = Handler(Looper.getMainLooper())
+    private val message = TextView(context)
+    private val tabs = TabPill(context)
 
-    private data class Cell(val emoji: Emoji?, val category: Int)
+    /** A grid entry: a section title (spans the row) or one emoji. */
+    private data class Item(val emoji: Emoji?, val category: Int, val header: String? = null)
 
     init {
-        val searchH = (44 * d).toInt()
-        val bottomBarH = (44 * d).toInt()
-        val titleH = (22 * d).toInt()
-        val gridH = panelHeight - searchH - bottomBarH - titleH
+        val catH = (46 * d).toInt()
+        val searchH = (46 * d).toInt()
+        val bottomH = (58 * d).toInt()
+        val gridH = panelHeight - catH - searchH
 
         val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
-        // "Search Emoji" pill, like iOS
+        // Category icons across the top; the active one sits in a soft rounded bubble.
+        categoryBar.onPick = { cat -> scrollToCategory(cat) }
+        column.addView(categoryBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, catH).apply {
+            setMargins((8 * d).toInt(), (4 * d).toInt(), (8 * d).toInt(), 0)
+        })
+
+        // Wide "Search" field
         val search = SearchPill(context)
         search.setOnClickListener { listener.onFeedback(); listener.onSearch() }
         column.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, searchH).apply {
-            setMargins((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), 0)
+            setMargins((12 * d).toInt(), 0, (12 * d).toInt(), 0)
         })
 
-        title.apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(theme.keySubText)
-            letterSpacing = 0.05f
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding((14 * d).toInt(), 0, 0, 0)
-            text = EmojiData.CATEGORY_NAMES[1]
+        // Vertically scrolling 8-column grid with section titles; the bottom bar floats over it.
+        val body = FrameLayout(context)
+        layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int) = if (items.getOrNull(position)?.header != null) columns else 1
         }
-        column.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, titleH))
-
-        adapter.cellSize = gridH / rows
         grid.layoutManager = layoutManager
         grid.adapter = adapter
-        grid.setPadding((6 * d).toInt(), 0, (6 * d).toInt(), 0)
+        grid.setPadding((6 * d).toInt(), (4 * d).toInt(), (6 * d).toInt(), bottomH)
         grid.clipToPadding = false
         grid.itemAnimator = null
         grid.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) = syncCategory()
         })
-        column.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH))
-
-        val bar = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val abc = TextView(context).apply {
-            text = "ABC"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(theme.keyText)
+        body.addView(grid, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        message.apply {
             gravity = Gravity.CENTER
+            setTextColor(theme.keySubText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setPadding(0, 0, 0, bottomH)
+            visibility = GONE
+        }
+        body.addView(message, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        val bottom = FrameLayout(context)
+        val abc = CircleButton(context, null, "ABC").apply {
             setOnClickListener { listener.onFeedback(); listener.onAbc() }
         }
-        bar.addView(abc, LinearLayout.LayoutParams((52 * d).toInt(), (36 * d).toInt()).apply {
-            marginStart = (4 * d).toInt()
+        bottom.addView(abc, LayoutParams((48 * d).toInt(), (48 * d).toInt(), Gravity.START or Gravity.CENTER_VERTICAL).apply {
+            marginStart = (10 * d).toInt()
         })
-        categoryBar.onPick = { cat -> scrollToCategory(cat) }
-        bar.addView(categoryBar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-        val del = IconButton(context, Icons.Kind.BACKSPACE, theme.keyText, null)
+        tabs.onTab = { i -> selectTab(i) }
+        bottom.addView(tabs, LayoutParams((240 * d).toInt(), (46 * d).toInt(), Gravity.CENTER))
+        val del = CircleButton(context, Icons.Kind.BACKSPACE, null)
         del.setOnTouchListener(RepeatListener())
-        bar.addView(del, LinearLayout.LayoutParams((52 * d).toInt(), (36 * d).toInt()).apply {
-            marginEnd = (4 * d).toInt()
+        bottom.addView(del, LayoutParams((48 * d).toInt(), (48 * d).toInt(), Gravity.END or Gravity.CENTER_VERTICAL).apply {
+            marginEnd = (10 * d).toInt()
         })
-        column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, bottomBarH))
+        body.addView(bottom, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, bottomH, Gravity.BOTTOM))
+
+        column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH))
         addView(column, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight))
 
         toneOverlay.apply {
@@ -132,6 +135,17 @@ class EmojiPanel(
         loadData()
     }
 
+    private fun selectTab(i: Int) {
+        listener.onFeedback()
+        tabs.selected = i
+        if (i == 0) {
+            grid.visibility = VISIBLE; message.visibility = GONE
+        } else {
+            grid.visibility = INVISIBLE; message.visibility = VISIBLE
+            message.text = if (i == 1) "GIFs are coming soon" else "Stickers are coming soon"
+        }
+    }
+
     private fun loadData() {
         Executors.newSingleThreadExecutor().execute {
             val cats = EmojiData.categories(context)
@@ -141,42 +155,35 @@ class EmojiPanel(
     }
 
     private fun build(cats: List<List<Emoji>>, recents: List<String>) {
-        val list = ArrayList<Cell>()
+        val list = ArrayList<Item>()
         val starts = IntArray(9)
         val lookup = HashMap<String, Emoji>()
         cats.forEach { c -> c.forEach { lookup[it.text] = it } }
-        fun section(index: Int, items: List<Emoji>) {
+        fun section(index: Int, emoji: List<Emoji>) {
             starts[index] = list.size
-            items.forEach { list += Cell(it, index) }
-            while (list.size % rows != 0) list += Cell(null, index)
+            list += Item(null, index, EmojiData.CATEGORY_NAMES[index])
+            emoji.forEach { list += Item(it, index) }
         }
         val recentEmoji = recents.map { r -> lookup[r] ?: Emoji(r, false, "") }
-        section(0, if (recentEmoji.isEmpty()) cats[0].take(20) else recentEmoji)
+        if (recentEmoji.isNotEmpty()) section(0, recentEmoji) else starts[0] = 0
         cats.forEachIndexed { i, c -> section(i + 1, c) }
-        cells = list
+        items = list
         sectionStarts = starts
         adapter.notifyDataSetChanged()
-        val firstCat = if (recents.isEmpty()) 1 else 0
-        layoutManager.scrollToPositionWithOffset(starts[firstCat], 0)
-        categoryBar.active = firstCat
-        title.text = EmojiData.CATEGORY_NAMES[firstCat]
+        categoryBar.active = if (recentEmoji.isEmpty()) 1 else 0
     }
 
     private fun scrollToCategory(cat: Int) {
         listener.onFeedback()
+        if (tabs.selected != 0) selectTab(0)
         layoutManager.scrollToPositionWithOffset(sectionStarts[cat], 0)
         categoryBar.active = cat
-        title.text = EmojiData.CATEGORY_NAMES[cat]
     }
 
     private fun syncCategory() {
-        val pos = layoutManager.findFirstCompletelyVisibleItemPosition().takeIf { it >= 0 }
-            ?: layoutManager.findFirstVisibleItemPosition()
-        val cat = cells.getOrNull(pos)?.category ?: return
-        if (cat != categoryBar.active) {
-            categoryBar.active = cat
-            title.text = EmojiData.CATEGORY_NAMES[cat]
-        }
+        val pos = layoutManager.findFirstVisibleItemPosition()
+        val cat = items.getOrNull(pos)?.category ?: return
+        if (cat != categoryBar.active) categoryBar.active = cat
     }
 
     private fun shown(e: Emoji): String {
@@ -196,6 +203,7 @@ class EmojiPanel(
         val size = (46 * d).toInt()
         for (t in options) {
             val v = EmojiCell(context).apply {
+                square = false
                 emoji = EmojiData.withTone(e.text, t)
                 setOnClickListener {
                     history.setTone(e.text, t)
@@ -233,22 +241,32 @@ class EmojiPanel(
     }
 
     private inner class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-        var cellSize = 0
-        override fun getItemCount() = cells.size
+        override fun getItemCount() = items.size
+        override fun getItemViewType(position: Int) = if (items[position].header != null) 1 else 0
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-            val v = EmojiCell(parent.context).apply {
-                layoutParams = RecyclerView.LayoutParams((cellSize * 1.06f).toInt(), cellSize)
+            val v: View = if (viewType == 1) TextView(parent.context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(theme.keySubText)
+                letterSpacing = 0.04f
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding((8 * d).toInt(), (6 * d).toInt(), 0, 0)
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (32 * d).toInt())
+            } else EmojiCell(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             return object : RecyclerView.ViewHolder(v) {}
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            val v = holder.itemView as EmojiCell
-            val e = cells[position].emoji
-            if (e == null) {
-                v.emoji = ""; v.setOnClickListener(null); v.setOnLongClickListener(null); v.isClickable = false
+            val item = items[position]
+            if (item.header != null) {
+                (holder.itemView as TextView).text = item.header.lowercase().replaceFirstChar { it.uppercase() }
                 return
             }
+            val v = holder.itemView as EmojiCell
+            val e = item.emoji ?: return
             v.emoji = shown(e)
             v.contentDescription = e.name
             v.setOnClickListener { commit(v.emoji) }
@@ -282,17 +300,29 @@ class EmojiPanel(
         }
     }
 
-    /** One emoji, drawn with 3D art (or the font for flags), slightly shrunk while pressed. */
+    /** One emoji in a square cell; a light rounded highlight while pressed. */
     private inner class EmojiCell(context: Context) : View(context) {
         var emoji: String = ""
             set(v) { field = v; invalidate() }
+        var square = true
+        private val press = Paint(Paint.ANTI_ALIAS_FLAG)
 
         init { isClickable = true }
 
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            if (!square) return super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            setMeasuredDimension(w, w)
+        }
+
         override fun onDraw(canvas: Canvas) {
             if (emoji.isEmpty()) return
-            val size = minOf(width, height) * if (isPressed) 0.66f else 0.74f
-            EmojiImages.draw(context, canvas, emoji, width / 2f, height / 2f, size)
+            if (isPressed) {
+                press.color = if (theme.dark) 0x26FFFFFF else 0x14000000
+                val r = 12 * d
+                canvas.drawRoundRect(2 * d, 2 * d, width - 2 * d, height - 2 * d, r, r, press)
+            }
+            EmojiImages.draw(context, canvas, emoji, width / 2f, height / 2f, minOf(width, height) * 0.74f)
         }
 
         override fun drawableStateChanged() {
@@ -300,26 +330,97 @@ class EmojiPanel(
         }
     }
 
-    /** The rounded "Search Emoji" field. Tapping it opens search above the letter keys. */
+    /** Wide rounded "Search" field. Tapping it opens search above the letter keys. */
     private inner class SearchPill(context: Context) : View(context) {
         private val bg = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 16 * resources.displayMetrics.scaledDensity }
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 17 * resources.displayMetrics.scaledDensity }
 
         init { isClickable = true }
 
         override fun onDraw(canvas: Canvas) {
-            val h = height - 6 * d
-            val top = 3 * d
-            bg.color = if (theme.dark) 0x33FFFFFF else 0xCCFFFFFF.toInt()
+            val h = height - 8 * d
+            val top = 4 * d
+            bg.color = if (theme.dark) 0x2EFFFFFF else 0x1F767680
             canvas.drawRoundRect(0f, top, width.toFloat(), top + h, h / 2f, h / 2f, bg)
             val cy = top + h / 2f
-            Icons.draw(canvas, Icons.Kind.SEARCH, 22 * d, cy, 16 * d, theme.keySubText)
+            Icons.draw(canvas, Icons.Kind.SEARCH, 22 * d, cy, 17 * d, theme.keySubText)
             text.color = theme.keySubText
-            canvas.drawText("Search Emoji", 38 * d, cy - (text.descent() + text.ascent()) / 2f, text)
+            canvas.drawText("Search", 42 * d, cy - (text.descent() + text.ascent()) / 2f, text)
         }
     }
 
-    /** Grey category icons along the bottom; the active one sits in a soft circle. */
+    /** Glass circle with an icon or a short label (ABC, delete). */
+    private inner class CircleButton(context: Context, private val kind: Icons.Kind?, private val label: String?) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            textSize = 14 * resources.displayMetrics.scaledDensity
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+
+        init { isClickable = true }
+
+        override fun onDraw(canvas: Canvas) {
+            val r = minOf(width, height) / 2f - 2 * d
+            paint.color = if (theme.dark) 0x55000000 else 0x22000000
+            canvas.drawCircle(width / 2f, height / 2f + 1.5f * d, r, paint)
+            paint.color = if (isPressed) theme.keyFillPressed else (if (theme.dark) 0xE63A3A3C.toInt() else 0xF2FFFFFF.toInt())
+            canvas.drawCircle(width / 2f, height / 2f, r, paint)
+            if (kind != null) Icons.draw(canvas, kind, width / 2f, height / 2f, r * 0.95f, theme.keyText)
+            if (label != null) {
+                text.color = theme.keyText
+                canvas.drawText(label, width / 2f, height / 2f - (text.descent() + text.ascent()) / 2f, text)
+            }
+        }
+
+        override fun drawableStateChanged() {
+            super.drawableStateChanged(); invalidate()
+        }
+    }
+
+    /** Floating "Emoji · GIFs · Stickers" pill with the selected tab highlighted. */
+    private inner class TabPill(context: Context) : View(context) {
+        var selected = 0
+            set(v) { field = v; invalidate() }
+        var onTab: (Int) -> Unit = {}
+        private val labels = listOf("Emoji", "GIFs", "Stickers")
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            textSize = 16 * resources.displayMetrics.scaledDensity
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val h = height.toFloat()
+            val w = width.toFloat()
+            paint.color = if (theme.dark) 0x55000000 else 0x22000000
+            canvas.drawRoundRect(0f, 1.5f * d, w, h, h / 2f, h / 2f, paint)
+            paint.color = if (theme.dark) 0xE63A3A3C.toInt() else 0xF2FFFFFF.toInt()
+            canvas.drawRoundRect(0f, 0f, w, h - 1.5f * d, h / 2f, h / 2f, paint)
+            val seg = w / labels.size
+            labels.forEachIndexed { i, l ->
+                if (i == selected) {
+                    paint.color = if (theme.dark) 0x33FFFFFF else 0x14000000
+                    val inset = 4 * d
+                    canvas.drawRoundRect(seg * i + inset, inset, seg * (i + 1) - inset, h - 1.5f * d - inset,
+                        (h - 2 * inset) / 2f, (h - 2 * inset) / 2f, paint)
+                }
+                text.color = if (i == selected) theme.keyText else theme.keySubText
+                text.typeface = Typeface.create(if (i == selected) "sans-serif-medium" else "sans-serif", Typeface.NORMAL)
+                canvas.drawText(l, seg * i + seg / 2f, (h - 1.5f * d) / 2f - (text.descent() + text.ascent()) / 2f, text)
+            }
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(e: MotionEvent): Boolean {
+            if (e.actionMasked == MotionEvent.ACTION_UP) {
+                onTab((e.x / (width / labels.size.toFloat())).toInt().coerceIn(0, labels.size - 1))
+            }
+            return true
+        }
+    }
+
+    /** Category icons across the top; the active one sits in a rounded bubble. */
     private inner class CategoryBar(context: Context) : View(context) {
         var active = 1
             set(v) { field = v; invalidate() }
@@ -336,19 +437,19 @@ class EmojiPanel(
             kinds.forEachIndexed { i, k ->
                 val cx = w * i + w / 2f
                 if (i == active) {
-                    sel.color = if (theme.dark) 0x40FFFFFF else 0x1A000000
-                    canvas.drawCircle(cx, cy, minOf(w, height.toFloat()) * 0.44f, sel)
+                    sel.color = if (theme.dark) 0x33FFFFFF else 0x14000000
+                    val r = minOf(w, height.toFloat()) * 0.46f
+                    canvas.drawRoundRect(cx - r, cy - r, cx + r, cy + r, r * 0.8f, r * 0.8f, sel)
                 }
-                val color = if (i == active) theme.keyText else theme.keySubText.withAlpha(0.85f)
-                Icons.draw(canvas, k, cx, cy, minOf(w * 0.55f, 18 * d), color)
+                val color = if (i == active) theme.keyText else theme.keySubText.withAlpha(0.8f)
+                Icons.draw(canvas, k, cx, cy, minOf(w * 0.55f, 21 * d), color)
             }
         }
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
-            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_MOVE) {
-                val i = (e.x / (width / kinds.size.toFloat())).toInt().coerceIn(0, kinds.size - 1)
-                if (i != active || e.actionMasked == MotionEvent.ACTION_UP) onPick(i)
+            if (e.actionMasked == MotionEvent.ACTION_UP) {
+                onPick((e.x / (width / kinds.size.toFloat())).toInt().coerceIn(0, kinds.size - 1))
             }
             return true
         }
