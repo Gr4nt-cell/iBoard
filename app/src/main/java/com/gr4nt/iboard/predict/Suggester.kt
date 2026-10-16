@@ -46,7 +46,12 @@ class Suggester(
         val norm = Dictionary.normalize(typed)
         val dictScore = dictionary.score(typed)
         val userCount = user.count(typed)
-        val valid = dictScore != null || user.knows(typed) || typed.any { it.isDigit() }
+        // "dont" → "don't", "im" → "I'm", "cest" → "c'est": a known contraction always wins, even if the
+        // apostrophe-less spelling was learned from earlier typing.
+        val contraction = if ('\'' !in typed && dictScore == null)
+            dictionary.completions(norm, 8).firstOrNull { '\'' in it.first && Dictionary.normalize(it.first) == norm }?.first
+        else null
+        val valid = contraction == null && (dictScore != null || user.knows(typed) || typed.any { it.isDigit() })
 
         val scored = LinkedHashMap<String, Float>()
         fun add(word: String, score: Float) {
@@ -78,6 +83,7 @@ class Suggester(
             }
             if (best.distance <= limit && best.score > 1.2f) auto = best.word
         }
+        if (autoOk && contraction != null) auto = contraction
         // Accent fixes are always safe: "cafe" → "café" when only the accented form exists.
         if (autoOk && auto == null && dictScore == null && userCount == 0) {
             val accent = dictionary.completions(norm, 3).firstOrNull { Dictionary.normalize(it.first) == norm }

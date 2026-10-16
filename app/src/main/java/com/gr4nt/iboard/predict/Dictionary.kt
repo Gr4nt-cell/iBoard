@@ -92,7 +92,9 @@ class Dictionary private constructor(
                 n = n.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
                     .replace('ى', 'ي').replace('ة', 'ه')
             }
+            // Apostrophes are ignored when matching, so "dont" finds "don't" and "cest" finds "c'est".
             return n.replace("ß", "ss").replace("œ", "oe").replace("æ", "ae")
+                .replace("'", "").replace("\u2019", "")
         }
 
         fun load(context: Context, lang: String): Dictionary {

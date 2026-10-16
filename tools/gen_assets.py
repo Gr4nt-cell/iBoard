@@ -52,11 +52,45 @@ def build_dict(fw_root, out_dir):
                 elif lang == "en" and word == "i":
                     word = "I"
                 seen[word] = seen.get(word, 0) + count
+        fix_contractions(lang, seen)
         words = sorted(seen.items(), key=lambda kv: -kv[1])[:MAX_WORDS]
         with open(os.path.join(out_dir, f"{lang}.txt"), "w", encoding="utf-8") as f:
             for w, c in words:
                 f.write(f"{w}\t{c}\n")
         print(lang, len(words), "words")
+
+
+# The subtitle corpus splits contractions ("don't" -> "don" + "t") and keeps apostrophe-less
+# misspellings ("dont"). Rebuild the real forms so predictions and autocorrect use them.
+EN_NT_STEMS = ["don", "didn", "doesn", "couldn", "wouldn", "shouldn", "isn", "aren", "wasn", "weren",
+               "hasn", "haven", "hadn", "mustn", "needn", "mightn"]
+# Contractions whose stem is also a real word: frequency relative to "don't".
+EN_SHARED = {"I'm": .95, "it's": .9, "that's": .55, "can't": .5, "you're": .42, "I'll": .36, "what's": .3,
+             "let's": .27, "he's": .27, "there's": .22, "we're": .22, "I've": .21, "she's": .17, "they're": .17,
+             "won't": .16, "I'd": .15, "ain't": .08, "you'll": .1, "we'll": .1, "you've": .08, "he'll": .05,
+             "she'll": .03, "they'll": .04, "we've": .05, "they've": .04, "you'd": .05, "he'd": .03, "we'd": .03,
+             "who's": .06, "where's": .04, "how's": .03, "here's": .06, "y'all": .02, "o'clock": .03}
+EN_DROP = ["dont", "didnt", "doesnt", "couldnt", "wouldnt", "shouldnt", "isnt", "arent", "wasnt", "werent",
+           "hasnt", "havent", "hadnt", "mustnt", "cant", "wont", "im", "youre", "thats", "whats", "theyre",
+           "ive", "hes", "shes", "theres", "youve", "youll", "ain", "aint", "dunno"]
+FR_ADD = {"c'est": .9, "j'ai": .55, "n'est": .25, "d'accord": .2, "qu'il": .15, "s'il": .12, "c'était": .12,
+          "aujourd'hui": .06, "j'étais": .05, "qu'elle": .05, "l'on": .03, "j'aime": .04, "t'es": .04}
+
+
+def fix_contractions(lang, seen):
+    if lang == "en":
+        dont = seen.get("don", 1000000)
+        for stem in EN_NT_STEMS:
+            if stem in seen:
+                seen[stem + "'t"] = seen.get(stem + "'t", 0) + seen.pop(stem)
+        for word, share in EN_SHARED.items():
+            seen[word] = max(seen.get(word, 0), int(dont * share))
+        for w in EN_DROP:
+            seen.pop(w, None)
+    elif lang == "fr":
+        base = seen.get("est", 1000000)
+        for word, share in FR_ADD.items():
+            seen[word] = max(seen.get(word, 0), int(base * share))
 
 
 # iOS category order

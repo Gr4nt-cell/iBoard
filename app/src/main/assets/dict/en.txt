@@ -25,10 +25,12 @@ no	4374975
 not	4262273
 be	4210868
 are	4203821
-don	4158644
+don't	4158644
+I'm	3950711
 know	3892394
 can	3826118
 with	3806977
+it's	3742779
 but	3631462
 all	3544700
 so	3434152
@@ -49,11 +51,13 @@ at	2431398
 him	2431059
 now	2298830
 oh	2298308
+that's	2287254
 one	2263956
 come	2203919
 well	2159909
 her	2154982
 how	2140365
+can't	2079322
 yeah	2000641
 will	1969807
 got	1968389
@@ -61,6 +65,7 @@ want	1950845
 think	1839473
 as	1792220
 see	1781493
+you're	1746630
 did	1742764
 good	1741730
 who	1734491
@@ -71,6 +76,7 @@ his	1666361
 yes	1634050
 when	1531731
 going	1520767
+I'll	1497111
 time	1453708
 an	1449181
 okay	1428884
@@ -86,6 +92,7 @@ then	1275502
 had	1274537
 or	1267646
 been	1265150
+what's	1247593
 our	1191941
 gonna	1188190
 tell	1176290
@@ -94,8 +101,10 @@ man	1173588
 some	1166914
 say	1153915
 hey	1149292
+let's	1122833
+he's	1122833
 could	1111837
-didn	1100643
+didn't	1100643
 by	1090424
 need	1040131
 something	1038638
@@ -107,10 +116,13 @@ down	978966
 make	963885
 very	945653
 never	930831
+there's	914901
+we're	914901
 only	887363
 people	885915
 over	880841
 because	880112
+I've	873315
 little	869522
 please	842120
 love	830324
@@ -128,15 +140,19 @@ even	744544
 much	738599
 doing	732145
 sure	709390
+she's	706969
+they're	706969
 thing	697528
 these	683128
 help	666286
+won't	665383
 first	656387
 into	655747
 anything	640206
 still	639540
 find	626520
 life	624596
+I'd	623796
 nothing	622415
 sir	619500
 day	617674
@@ -177,7 +193,7 @@ leave	478282
 does	478174
 money	471643
 around	471463
-doesn	471037
+doesn't	471037
 name	455543
 place	444863
 ever	444088
@@ -187,9 +203,11 @@ father	437537
 guy	435832
 made	433900
 old	431911
-isn	429536
+isn't	429536
 which	422483
 big	417218
+you'll	415864
+we'll	415864
 lot	411660
 done	408760
 hello	405534
@@ -236,6 +254,8 @@ kill	339509
 talking	337629
 found	337382
 next	335573
+ain't	332691
+you've	332691
 getting	331186
 care	330956
 car	330261
@@ -248,7 +268,7 @@ hi	320316
 dead	317589
 many	314850
 mind	312927
-wasn	312240
+wasn't	312240
 friend	308204
 best	307071
 mom	305139
@@ -265,7 +285,7 @@ real	294536
 without	290509
 baby	290496
 room	290206
-wouldn	288422
+wouldn't	288422
 already	287837
 move	283807
 most	283006
@@ -294,7 +314,7 @@ also	259803
 pretty	259500
 bit	258929
 took	258808
-haven	258463
+haven't	258463
 yet	257947
 men	257319
 whole	257109
@@ -305,6 +325,8 @@ since	254427
 wife	254038
 days	253171
 guess	250320
+who's	249518
+here's	249518
 tomorrow	248729
 matter	247812
 meet	247466
@@ -325,7 +347,7 @@ saying	236600
 phone	235246
 play	233865
 looks	233814
-couldn	233368
+couldn't	233368
 fucking	232845
 problem	232325
 few	231375
@@ -355,6 +377,9 @@ worry	211329
 later	208878
 year	208705
 watch	207949
+he'll	207932
+we've	207932
+you'd	207932
 music	207205
 hand	206247
 having	206106
@@ -394,7 +419,7 @@ its	180594
 whatever	180082
 eyes	179260
 shut	178378
-aren	178286
+aren't	178286
 hit	177770
 taking	177667
 easy	177337
@@ -421,7 +446,9 @@ quite	166980
 four	166957
 anyway	166702
 close	166677
-ain	166551
+they'll	166345
+they've	166345
+where's	166345
 party	166137
 fun	165693
 against	165033
@@ -533,6 +560,11 @@ em	125033
 fact	124995
 lord	124880
 captain	124874
+she'll	124759
+he'd	124759
+we'd	124759
+how's	124759
+o'clock	124759
 six	124087
 hot	123994
 funny	123924
@@ -550,7 +582,7 @@ dinner	117970
 sighs	117410
 sort	117267
 leaving	117050
-shouldn	117029
+shouldn't	117029
 running	116973
 boss	116736
 alright	116629
@@ -653,7 +685,7 @@ coffee	89650
 return	89451
 secret	89236
 weeks	88925
-weren	88427
+weren't	88427
 date	88407
 seeing	88192
 fall	87762
@@ -686,6 +718,7 @@ throw	83679
 picture	83461
 land	83422
 feet	83295
+y'all	83172
 wonder	82903
 questions	82887
 speaking	82769
@@ -776,7 +809,7 @@ michael	70741
 hotel	70659
 christmas	70624
 attack	70583
-hasn	70449
+hasn't	70449
 round	70043
 expect	69614
 sing	69575
@@ -1136,7 +1169,7 @@ drinking	44770
 press	44624
 bother	44619
 foot	44588
-hadn	44545
+hadn't	44545
 blame	44534
 crap	44529
 drugs	44516
@@ -2476,7 +2509,7 @@ chosen	17293
 engaged	17285
 julia	17281
 charming	17277
-mustn	17276
+mustn't	17276
 anger	17258
 spending	17255
 learning	17252
@@ -3869,7 +3902,6 @@ blonde	9536
 catching	9534
 exposed	9534
 canada	9533
-dont	9523
 han	9522
 von	9519
 comedy	9514
@@ -4726,7 +4758,6 @@ gibbs	7369
 drowned	7366
 wolves	7364
 filming	7364
-dunno	7363
 cursed	7360
 twin	7358
 sorrow	7354
@@ -5120,7 +5151,6 @@ muscles	6555
 kidney	6554
 finishing	6553
 products	6553
-im	6553
 wu	6549
 invasion	6544
 affection	6544
@@ -6036,7 +6066,7 @@ buys	5237
 disorder	5236
 interrupting	5236
 sadness	5235
-needn	5234
+needn't	5234
 cease	5233
 barnes	5233
 scoundrel	5232
@@ -7346,7 +7376,6 @@ depressing	3938
 lasts	3938
 doom	3937
 milo	3936
-cant	3936
 backpack	3934
 aisle	3933
 insulting	3933
@@ -7419,7 +7448,6 @@ puke	3869
 hysterical	3868
 taller	3868
 employment	3867
-thats	3866
 agrees	3865
 dodge	3864
 unite	3860
@@ -7695,7 +7723,6 @@ alaska	3660
 ha-ha-ha	3660
 interference	3660
 freakin	3659
-wont	3659
 weep	3659
 clive	3659
 mourning	3659
@@ -9892,7 +9919,6 @@ cologne	2491
 accusation	2491
 outsider	2491
 serum	2490
-whats	2490
 spaces	2490
 oral	2489
 shades	2489
@@ -13362,7 +13388,6 @@ snarls	1543
 chiu	1542
 flawless	1542
 considers	1542
-youre	1542
 harmful	1542
 horseback	1541
 owens	1541
@@ -13994,7 +14019,6 @@ maternal	1434
 harass	1434
 stomp	1434
 cheeseburger	1434
-didnt	1434
 chime	1434
 oppression	1433
 resembles	1433
@@ -16028,7 +16052,6 @@ quincy	1155
 shalom	1155
 toil	1155
 weiss	1155
-hes	1155
 alexandria	1154
 sdi	1154
 epi	1154
@@ -17543,7 +17566,6 @@ palaces	993
 delaware	993
 hurley	993
 faction	993
-ive	993
 rooney	992
 nominees	992
 sleepwalking	992
@@ -17561,7 +17583,6 @@ sobriety	992
 beka	992
 gulp	992
 intensifies	991
-theres	991
 heirloom	991
 merrily	991
 unified	991
@@ -22389,7 +22410,6 @@ nappy	655
 bowers	655
 retrospect	655
 kajal	655
-shes	655
 leased	655
 talyn	655
 parliamentary	655
@@ -22424,7 +22444,6 @@ tempest	653
 petrie	653
 deceptive	653
 voss	653
-doesnt	653
 druid	653
 erected	653
 kendrick	653
@@ -23621,7 +23640,6 @@ retrace	598
 stockholders	598
 proton	598
 tt	598
-isnt	597
 mallard	597
 reincarnated	597
 planks	597
@@ -26666,7 +26684,6 @@ disorganized	485
 dispenser	485
 fillet	485
 beyonce	485
-mightn	485
 aced	485
 redecorating	485
 diwali	485
@@ -26693,6 +26710,7 @@ invulnerable	485
 closeness	485
 koh	485
 bobbing	485
+mightn't	485
 bleats	484
 bleu	484
 unwittingly	484
@@ -27151,7 +27169,6 @@ flowering	471
 enriched	471
 foal	471
 legitimacy	471
-theyre	471
 arrhythmia	471
 lehman	471
 indulged	471
@@ -28693,7 +28710,6 @@ starscream	426
 panorama	426
 ricki	426
 regimental	426
-aint	426
 deploying	426
 oceanic	426
 magnate	426
@@ -28877,7 +28893,6 @@ joplin	421
 rummage	421
 banishment	421
 tories	421
-havent	421
 abscess	421
 malaysian	421
 playlist	421
@@ -30112,7 +30127,6 @@ lyrical	390
 self-serving	390
 shunt	390
 forsythe	390
-youll	390
 jesuit	390
 arrgh	390
 concord	390
@@ -30458,7 +30472,6 @@ drinkers	382
 moos	382
 dress-up	382
 mortician	382
-youve	382
 dirtiest	382
 voluptuous	382
 aprons	382
@@ -34223,7 +34236,6 @@ jiu	309
 ascot	309
 nerys	309
 geezers	309
-wasnt	309
 spearhead	309
 scooters	309
 slabs	309
@@ -34259,7 +34271,6 @@ whos	308
 shriveled	308
 cheetahs	308
 kk	308
-couldnt	308
 generalissimo	308
 eco	308
 toiled	308
@@ -34812,7 +34823,6 @@ affidavits	299
 ks	299
 kilmer	299
 yuh	299
-arent	299
 emy	299
 inlet	299
 trojans	299
@@ -34868,7 +34878,6 @@ nestled	298
 pitted	298
 lusty	298
 embalmed	298
-wouldnt	298
 fok	298
 coffeehouse	298
 starks	298
@@ -39989,12 +39998,3 @@ rosé	231
 dishonoured	231
 leukaemia	231
 headboard	231
-leotard	231
-sawako	230
-off-guard	230
-lady-in-waiting	230
-nonfat	230
-uniqueness	230
-gaseous	230
-lexicon	230
-zippo	230

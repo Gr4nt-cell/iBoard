@@ -1,6 +1,7 @@
 de	8435682
 je	8308698
 est	6942248
+c'est	6248023
 pas	5833676
 le	5305591
 que	5083052
@@ -11,6 +12,7 @@ un	4360896
 à	4119959
 et	4110855
 il	4025241
+j'ai	3818236
 a	3679682
 ne	3343288
 les	3046663
@@ -22,6 +24,7 @@ ce	2533544
 pour	2475533
 ai	2437065
 des	1902327
+n'est	1735562
 qui	1665879
 mais	1641141
 dans	1508883
@@ -30,6 +33,7 @@ elle	1476885
 me	1446772
 bien	1438129
 si	1409401
+d'accord	1388449
 du	1337227
 y	1320695
 suis	1303070
@@ -42,6 +46,7 @@ te	1127735
 au	1109359
 fait	1054966
 moi	1048758
+qu'il	1041337
 oui	1001703
 va	989526
 était	985841
@@ -53,6 +58,8 @@ quoi	894291
 se	867737
 comme	864987
 sais	851748
+s'il	833069
+c'était	833069
 être	743252
 veux	738917
 ici	725494
@@ -92,6 +99,7 @@ aussi	427827
 avoir	427178
 vraiment	423339
 voir	419803
+aujourd'hui	416534
 même	411247
 sa	408233
 oh	408070
@@ -108,6 +116,8 @@ peu	354756
 temps	354330
 quelque	353553
 fais	353373
+j'étais	347112
+qu'elle	347112
 toujours	345760
 encore	342386
 notre	339810
@@ -124,6 +134,8 @@ fois	297685
 vu	290541
 donc	281973
 sans	281163
+j'aime	277689
+t'es	277689
 monde	277005
 étais	276408
 parce	273723
@@ -160,6 +172,7 @@ beaucoup	211787
 vos	211081
 bonne	209592
 mort	208796
+l'on	208267
 mieux	205274
 vas	203968
 mère	202937
@@ -256,7 +269,6 @@ part	119964
 elles	118978
 jours	118455
 grand	117213
-aujourd'hui	117159
 venir	116762
 ami	116639
 demain	116541
@@ -39986,15 +39998,3 @@ assoyez-vous	150
 entrerait	150
 analgésique	150
 capisce	150
-visitait	150
-tresor	150
-édifiant	150
-versés	150
-récupérait	150
-romy	150
-rappellerons	150
-lâ-bas	150
-galeuse	150
-carillons	150
-flats	150
-fugueurs	150
