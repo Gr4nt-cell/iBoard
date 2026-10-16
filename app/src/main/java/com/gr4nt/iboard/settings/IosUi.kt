@@ -142,8 +142,9 @@ class IosList(private val context: Context, val p: IosPalette) {
     }
 
     /** A row with a grey value and a chevron, like "Wallpaper  >". */
-    fun navRow(icon: Icons.Kind?, tint: Int, title: String, value: String?, onClick: () -> Unit): TextView {
-        val (row, _) = baseRow(icon, tint, title)
+    fun navRow(icon: Icons.Kind?, tint: Int, title: String, value: String?, subtitle: String? = null, onClick: () -> Unit): TextView {
+        val (row, texts) = baseRow(icon, tint, title)
+        subtitle?.let { addSubtitle(texts, it) }
         val v = TextView(context).apply {
             text = value ?: ""
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)

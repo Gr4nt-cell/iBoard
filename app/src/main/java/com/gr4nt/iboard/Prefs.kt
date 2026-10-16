@@ -33,6 +33,11 @@ class Prefs(context: Context) {
     val voiceTyping: Boolean get() = sp.getBoolean(VOICE_TYPING, true)
     val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 45)
     val aiConsent: Boolean get() = sp.getBoolean(AI_CONSENT, false)
+    val offlineDictation: Boolean get() = sp.getBoolean(OFFLINE_DICTATION, true)
+    val ramblerRewrite: Boolean get() = sp.getBoolean(RAMBLER_REWRITE, true)
+    val speechModel: String get() = sp.getString(SPEECH_MODEL, "whisper-base") ?: "whisper-base"
+    val rewriteModel: String get() = sp.getString(REWRITE_MODEL, "qwen-0.5b") ?: "qwen-0.5b"
+    val modelsWifiOnly: Boolean get() = sp.getBoolean(MODELS_WIFI_ONLY, true)
     val emojiStyle: String get() = sp.getString(EMOJI_STYLE, "3d") ?: "3d"
 
     val languages: List<String>
@@ -99,6 +104,11 @@ class Prefs(context: Context) {
         const val EMOJI_STYLE = "emoji_style"
         const val AI_CONSENT = "ai_consent"
         const val MIC_CONSENT = "mic_consent"
+        const val OFFLINE_DICTATION = "offline_dictation"
+        const val RAMBLER_REWRITE = "rambler_rewrite"
+        const val SPEECH_MODEL = "speech_model"
+        const val REWRITE_MODEL = "rewrite_model"
+        const val MODELS_WIFI_ONLY = "models_wifi_only"
 
         const val DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
         val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")

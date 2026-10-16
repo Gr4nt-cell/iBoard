@@ -279,6 +279,10 @@ class SettingsActivity : AppCompatActivity() {
         l.section("Icon Capsule", "The glass bar under the keys holds settings, emoji, ✨ AI (predictions, Translate, Fix Grammar), clipboard and the dictation mic. Long-press the gear to pick another keyboard.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
             switchRow(Icons.Kind.MIC, red, "Dictation", prefs.voiceTyping) { putBool(Prefs.VOICE_TYPING, it) }
+            val store = com.gr4nt.iboard.voice.ModelStore(this@SettingsActivity)
+            val ready = store.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) != null
+            navRow(Icons.Kind.WAVE, indigo, "Offline Dictation", if (ready) "Ready" else "Download",
+                subtitle = "Rambler-style voice typing, no internet") { offlinePage() }
             switchRow(Icons.Kind.SPARKLE, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }
         }
 
@@ -413,6 +417,85 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
     }
+
+    /** Download, pick and delete the offline speech and Rambler models. */
+    private fun offlinePage() {
+        val store = com.gr4nt.iboard.voice.ModelStore(this)
+        lateinit var page: View
+        val poll = android.os.Handler(mainLooper)
+        fun rebuild(): Unit = run {
+            val fresh = buildOffline(store) { rebuild() }
+            val i = stack.indexOf(page)
+            if (i < 0) return@run
+            container.removeView(page); container.addView(fresh); stack[i] = fresh; page = fresh
+        }
+        page = buildOffline(store) { rebuild() }
+        push(page)
+        val tick = object : Runnable {
+            override fun run() {
+                if (!stack.contains(page)) return
+                val busy = com.gr4nt.iboard.voice.ModelCatalog.all.any { store.state(it) is com.gr4nt.iboard.voice.ModelStore.State.Downloading }
+                if (busy) rebuild()
+                poll.postDelayed(this, if (busy) 1000 else 3000)
+            }
+        }
+        poll.postDelayed(tick, 1000)
+    }
+
+    private fun buildOffline(store: com.gr4nt.iboard.voice.ModelStore, rebuild: () -> Unit): View = subPage("Offline Dictation") {
+        section(footer = "Speak naturally. Pauses, “um”s, repeats and corrections like “Tuesday, no wait, Wednesday” are cleaned up on this phone — no internet needed. Models are downloaded once from Hugging Face.") {
+            switchRow(Icons.Kind.MIC, red, "Use Offline Dictation", prefs.offlineDictation,
+                subtitle = "🎤 uses the downloaded speech model") { putBool(Prefs.OFFLINE_DICTATION, it) }
+            switchRow(Icons.Kind.SPARKLE, purple, "Rambler Clean-Up", prefs.ramblerRewrite,
+                subtitle = "Rewrite rambles into polished text") { putBool(Prefs.RAMBLER_REWRITE, it) }
+            switchRow(Icons.Kind.GLOBE, blue, "Download on Wi-Fi Only", prefs.modelsWifiOnly) { putBool(Prefs.MODELS_WIFI_ONLY, it) }
+        }
+        section("Speech Recognition", "Turns your voice into punctuated text. Fast suits most phones; Accurate copes better with accents and noise.") {
+            com.gr4nt.iboard.voice.ModelCatalog.of(com.gr4nt.iboard.voice.ModelKind.SPEECH).forEach { modelRow(this, store, it, rebuild) }
+        }
+        section("Rambler Writing Model", "Turns what you said into what you meant. Optional: without it, iBoard still removes fillers and applies your corrections.") {
+            com.gr4nt.iboard.voice.ModelCatalog.of(com.gr4nt.iboard.voice.ModelKind.REWRITE).forEach { modelRow(this, store, it, rebuild) }
+        }
+    }
+
+    private fun modelRow(l: IosList, store: com.gr4nt.iboard.voice.ModelStore, m: com.gr4nt.iboard.voice.OfflineModel, rebuild: () -> Unit) {
+        val speech = m.kind == com.gr4nt.iboard.voice.ModelKind.SPEECH
+        val selectedId = if (speech) prefs.speechModel else prefs.rewriteModel
+        val activeId = store.active(m.kind, selectedId)?.id
+        val state = store.state(m)
+        val value = when (state) {
+            is com.gr4nt.iboard.voice.ModelStore.State.Missing -> "${sizeLabel(m.sizeMb)}"
+            is com.gr4nt.iboard.voice.ModelStore.State.Downloading -> "${state.percent}%"
+            is com.gr4nt.iboard.voice.ModelStore.State.Failed -> "Retry"
+            is com.gr4nt.iboard.voice.ModelStore.State.Installed -> if (activeId == m.id) "In Use ✓" else "Installed"
+        }
+        val icon = if (speech) Icons.Kind.WAVE else Icons.Kind.SPARKLE
+        l.navRow(icon, if (speech) teal else purple, m.title, value, subtitle = m.subtitle) {
+            when (state) {
+                is com.gr4nt.iboard.voice.ModelStore.State.Missing, is com.gr4nt.iboard.voice.ModelStore.State.Failed -> {
+                    val wifi = if (prefs.modelsWifiOnly) " It will download when you're on Wi-Fi." else ""
+                    confirm("Download ${m.title}?", "${m.subtitle}. ${sizeLabel(m.sizeMb)}.$wifi", "Download") {
+                        store.download(m, prefs.modelsWifiOnly)
+                        sp.edit().putString(if (speech) Prefs.SPEECH_MODEL else Prefs.REWRITE_MODEL, m.id).apply()
+                        toast("Downloading — you can leave this screen")
+                        rebuild()
+                    }
+                }
+                is com.gr4nt.iboard.voice.ModelStore.State.Downloading ->
+                    confirm("Cancel download?", "${m.title} is ${state.percent}% downloaded.", "Cancel Download") { store.cancel(m); rebuild() }
+                is com.gr4nt.iboard.voice.ModelStore.State.Installed -> {
+                    AlertDialog.Builder(this).setTitle(m.title)
+                        .setItems(arrayOf("Use This Model", "Delete (${sizeLabel(m.sizeMb)})")) { _, which ->
+                            if (which == 0) sp.edit().putString(if (speech) Prefs.SPEECH_MODEL else Prefs.REWRITE_MODEL, m.id).apply()
+                            else store.delete(m)
+                            rebuild()
+                        }.show()
+                }
+            }
+        }
+    }
+
+    private fun sizeLabel(mb: Int) = if (mb >= 1000) String.format(java.util.Locale.US, "%.1f GB", mb / 1000f) else "$mb MB"
 
     private fun languagesPage() {
         lateinit var page: View

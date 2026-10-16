@@ -98,6 +98,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onDestroy() {
         prefs.sp.unregisterOnSharedPreferenceChangeListener(prefListener)
         voice?.destroy()
+        cancelOffline()
+        voiceWorker.execute { whisper?.close(); whisper = null; rewriter.close() }
+        voiceWorker.shutdown()
         clipStore.stop()
         suggester?.user?.save()
         scope.cancel()
@@ -449,7 +452,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             }
             Menu.UNDO -> {
                 kv.chipAccent = 1
-                kv.chips = listOf("↶ Undo", "Done")
+                kv.chips = listOf("↶ Original", "Done")
             }
             Menu.NONE -> kv.chips = null
         }
@@ -942,8 +945,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
+        if (prefs.offlineDictation && models.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) != null &&
+            com.gr4nt.iboard.voice.WhisperLib.available()
+        ) {
+            startOffline(); return
+        }
         if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(this, "No speech recognition service on this phone", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No speech recognition service on this phone. Download Offline Dictation in iBoard settings.",
+                Toast.LENGTH_LONG).show()
             return
         }
         listening = true
@@ -1027,6 +1036,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun stopVoice() {
+        if (offlineActive) { cancelOffline(); return }
         val wasListening = listening
         listening = false
         if (wasListening) voice?.stopListening() // final results still arrive and get committed
@@ -1038,6 +1048,132 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         listening = false
         keyboard?.listening = false
         keyboard?.statusText = null
+    }
+
+    // ------------------------------------------------------------ offline dictation (Whisper + Rambler)
+
+    private val models by lazy { com.gr4nt.iboard.voice.ModelStore(this) }
+    private val rewriter by lazy { com.gr4nt.iboard.voice.RamblerRewriter(applicationContext) }
+    private val voiceWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var whisper: com.gr4nt.iboard.voice.WhisperLib.Model? = null
+    private var chunker: com.gr4nt.iboard.voice.PauseChunker? = null
+    private val offlineText = StringBuilder()
+    @Volatile private var offlineActive = false
+    private var offlineSession = 0
+    private val releaseRewriter = Runnable { voiceWorker.execute { rewriter.close() } }
+
+    private fun startOffline() {
+        val speech = models.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) ?: return
+        val session = ++offlineSession
+        offlineActive = true
+        listening = true
+        synchronized(offlineText) { offlineText.setLength(0) }
+        keyboard?.listening = true
+        keyboard?.statusText = if (whisper?.path == models.file(speech).path) "Listening…" else "Loading offline speech…"
+        val main = android.os.Handler(mainLooper)
+        voiceWorker.execute {
+            val path = models.file(speech).path
+            if (whisper?.path != path) {
+                whisper?.close()
+                whisper = com.gr4nt.iboard.voice.WhisperLib.load(path)
+            }
+            if (whisper == null) {
+                main.post {
+                    Toast.makeText(this, "Couldn't load the offline speech model. Try downloading it again.", Toast.LENGTH_LONG).show()
+                    endVoice(); offlineActive = false
+                }
+                return@execute
+            }
+            val c = com.gr4nt.iboard.voice.PauseChunker(
+                onChunk = { samples -> voiceWorker.execute { transcribeChunk(samples, session) } },
+                onLevel = {},
+                onLongSilence = { main.post { if (offlineSession == session) stopOffline() } },
+            )
+            main.post {
+                if (!offlineActive || offlineSession != session) return@post
+                if (c.start()) {
+                    chunker = c
+                    keyboard?.statusText = "Listening… speak naturally, tap 🎤 when done"
+                } else {
+                    Toast.makeText(this, "Microphone is busy", Toast.LENGTH_SHORT).show()
+                    endVoice(); offlineActive = false
+                }
+            }
+        }
+    }
+
+    /** Runs on the voice worker: speech → text for one chunk, shown live in the bar. */
+    private fun transcribeChunk(samples: FloatArray, session: Int) {
+        val model = whisper ?: return
+        if (session != offlineSession) return
+        val context = synchronized(offlineText) { offlineText.takeLast(200).toString() }
+        val text = model.transcribe(samples, lang, (com.gr4nt.iboard.voice.WhisperLib.promptFor(lang) + " " + context).trim())
+        if (text.isBlank()) return
+        val shown = synchronized(offlineText) {
+            if (offlineText.isNotEmpty()) offlineText.append(' ')
+            offlineText.append(text)
+            offlineText.toString()
+        }
+        keyboard?.post { if (session == offlineSession && (offlineActive || listening)) keyboard?.statusText = shown }
+    }
+
+    /** User tapped 🎤 again (or went quiet): finish transcribing, clean up the ramble, insert it. */
+    private fun stopOffline() {
+        if (!offlineActive) return
+        offlineActive = false
+        listening = false
+        keyboard?.listening = false
+        keyboard?.statusText = "Transcribing…"
+        val session = offlineSession
+        val before = currentInputConnection?.getTextBeforeCursor(400, 0)?.toString() ?: ""
+        val c = chunker
+        chunker = null
+        val main = android.os.Handler(mainLooper)
+        voiceWorker.execute {
+            c?.stop() // flushes the last chunk onto this same worker queue
+            voiceWorker.execute {
+                if (session != offlineSession) return@execute
+                val raw = synchronized(offlineText) { offlineText.toString().trim() }
+                if (raw.isBlank()) { main.post { keyboard?.statusText = null }; return@execute }
+                val plain = com.gr4nt.iboard.predict.Dictation.format(raw, lang, before)
+                var finalText = com.gr4nt.iboard.voice.RambleRules.clean(raw, lang, before)
+                val rewriteModel = if (prefs.ramblerRewrite) models.active(com.gr4nt.iboard.voice.ModelKind.REWRITE, prefs.rewriteModel) else null
+                if (rewriteModel != null) {
+                    main.post { keyboard?.statusText = "Polishing…" }
+                    rewriter.rewrite(models.file(rewriteModel).path, finalText, lang)?.let { finalText = it }
+                    main.removeCallbacks(releaseRewriter)
+                    main.postDelayed(releaseRewriter, 120_000) // free the model's memory when idle
+                }
+                main.post {
+                    keyboard?.statusText = null
+                    if (session != offlineSession) return@post
+                    insertDictated(finalText, plain)
+                }
+            }
+        }
+    }
+
+    private fun insertDictated(text: String, original: String) {
+        val ic = currentInputConnection ?: return
+        val last = ic.getTextBeforeCursor(1, 0)?.toString() ?: ""
+        var out = text
+        if (last.isNotEmpty() && !last.last().isWhitespace() && out.firstOrNull()?.isLetterOrDigit() == true) out = " $out"
+        if (!out.endsWith("\n")) out += " "
+        ic.commitText(out, 1)
+        if (original.trim() != text.trim()) {
+            // Offer the word-for-word transcript, like Rambler's "original" option.
+            undo = (if (out.startsWith(" ")) " " else "") + original.trim() + " " to out
+            showMenu(Menu.UNDO)
+        }
+    }
+
+    private fun cancelOffline() {
+        offlineActive = false
+        offlineSession++
+        val c = chunker
+        chunker = null
+        voiceWorker.execute { c?.stop() }
+        endVoice()
     }
 
     companion object {

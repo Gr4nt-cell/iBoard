@@ -23,6 +23,9 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Fetch whisper.cpp (offline speech engine)
+        run: git clone --depth 1 --branch v1.7.6 https://github.com/ggml-org/whisper.cpp app/src/main/cpp/whisper.cpp
+
       - name: Build APK
         run: |
           set -o pipefail
