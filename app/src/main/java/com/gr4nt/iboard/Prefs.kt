@@ -31,6 +31,7 @@ class Prefs(context: Context) {
     val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
     val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
     val voiceTyping: Boolean get() = sp.getBoolean(VOICE_TYPING, true)
+    val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 45)
 
     val languages: List<String>
         get() {
@@ -59,7 +60,7 @@ class Prefs(context: Context) {
     fun visualSignature(night: Boolean): String =
         listOf(
             theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
-            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping,
+            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping, bgOpacity,
         ).joinToString("|")
 
     companion object {
@@ -91,6 +92,7 @@ class Prefs(context: Context) {
         const val STRIP_ICONS = "strip_icons"
         const val ACCENT_COLOR = "accent_color"
         const val VOICE_TYPING = "voice_typing"
+        const val BG_OPACITY = "bg_opacity"
 
         const val DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
         val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")

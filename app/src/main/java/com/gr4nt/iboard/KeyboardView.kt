@@ -110,13 +110,15 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private val bottomPad = 6 * d
     private var keyH = 45 * d
     private var numKeyH = 38 * d
-    private val utilH = 40 * d
+    private val utilH = 48 * d
     private var radius = 8 * d
     private var textScale = 1f
 
     private class KeyBox(val key: Key, val rect: RectF, val row: Int)
 
     private val boxes = ArrayList<KeyBox>()
+    private val capsule = RectF()
+    private var capsuleShader: Shader? = null
     private val rowBounds = ArrayList<Pair<Float, Float>>()
 
     // --- paints ---
@@ -202,6 +204,10 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 x += widths[i] + keyGap
             }
             rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
+            if (row.isUtility) {
+                capsule.set(sidePad + 2 * d, y + 2 * d, w - sidePad - 2 * d, y + h - 2 * d)
+                capsuleShader = null
+            }
             y += h + rowGap
         }
     }
@@ -251,14 +257,17 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val pressed = isPressed(b)
         if (k.type == KeyType.SPACER) return
         if (layout?.rows?.getOrNull(b.row)?.isUtility == true) {
-            // Bare icons under the keyboard, like iOS's globe and dictation buttons.
+            if (boxes.firstOrNull { it.row == b.row } === b) drawCapsule(canvas, alpha)
             if (pressed) {
-                fillPaint.color = theme.keyFillPressed
-                canvas.drawCircle(r.centerX(), r.centerY(), min(r.height(), r.width()) * 0.48f, fillPaint)
+                fillPaint.color = if (theme.dark) 0x33FFFFFF else 0x22000000
+                tmpRect.set(r.left + 6 * d, capsule.top + 4 * d, r.right - 6 * d, capsule.bottom - 4 * d)
+                val rr = tmpRect.height() / 2f
+                canvas.drawRoundRect(tmpRect, rr, rr, fillPaint)
             }
             val kind = when (k.type) {
                 KeyType.GLOBE -> Icons.Kind.GLOBE
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+                KeyType.EMOJI -> Icons.Kind.EMOJI
                 else -> Icons.Kind.MIC
             }
             val color = if (k.type == KeyType.MIC && listening) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
@@ -359,6 +368,29 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 canvas.drawText(k.label, cx, baseline(cy, textPaint), textPaint)
             }
         }
+    }
+
+    /** A frosted Liquid Glass pill holding the globe, emoji, clipboard and mic icons. */
+    private fun drawCapsule(canvas: Canvas, alpha: Float) {
+        if (capsule.isEmpty) return
+        val rr = capsule.height() / 2f
+        shadowPaint.color = if (theme.dark) 0x55000000 else 0x1F3C2A5A
+        shadowPaint.alpha = (shadowPaint.alpha * alpha).toInt()
+        tmpRect.set(capsule.left, capsule.top + 1.5f * d, capsule.right, capsule.bottom + 1.5f * d)
+        canvas.drawRoundRect(tmpRect, rr, rr, shadowPaint)
+        fillPaint.color = if (theme.dark) 0x2EFFFFFF else 0x8CFFFFFF.toInt()
+        fillPaint.alpha = (fillPaint.alpha * alpha).toInt()
+        canvas.drawRoundRect(capsule, rr, rr, fillPaint)
+        val shader = capsuleShader ?: LinearGradient(
+            0f, capsule.top, 0f, capsule.top + capsule.height() * 0.6f,
+            if (theme.dark) 0x30FFFFFF else 0xA6FFFFFF.toInt(), 0x00FFFFFF, Shader.TileMode.CLAMP,
+        ).also { capsuleShader = it }
+        glossPaint.shader = shader
+        glossPaint.alpha = (alpha * 255).toInt()
+        canvas.drawRoundRect(capsule, rr, rr, glossPaint)
+        strokePaint.color = if (theme.dark) 0x40FFFFFF else 0xB3FFFFFF.toInt()
+        strokePaint.alpha = (strokePaint.alpha * alpha).toInt()
+        canvas.drawRoundRect(capsule, rr, rr, strokePaint)
     }
 
     private fun displayLabel(label: String): String {

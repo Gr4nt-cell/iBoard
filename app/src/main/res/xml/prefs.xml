@@ -11,6 +11,11 @@
             app:key="gradient" app:title="Background gradient" app:defaultValue="blossom"
             app:entries="@array/gradient_entries" app:entryValues="@array/gradient_values"
             app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            app:key="bg_opacity" app:title="Background opacity (%)" app:defaultValue="45"
+            app:summary="Lower is more transparent — the app shows through the gradient"
+            android:max="100" app:min="0" app:seekBarIncrement="5" app:showSeekBarValue="true"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Key customization" app:iconSpaceReserved="false">
@@ -37,8 +42,8 @@
             app:entries="@array/accent_entries" app:entryValues="@array/accent_values"
             app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
         <SwitchPreferenceCompat app:key="space_label" app:title="Label on space bar" app:defaultValue="false" app:iconSpaceReserved="false" />
-        <SwitchPreferenceCompat app:key="utility_row" app:title="Globe &amp; mic row"
-            app:summary="iOS-style row under the keys with 🌐, clipboard and 🎤" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="utility_row" app:title="Icon capsule"
+            app:summary="Glass capsule under the keys with 🌐, 😊, clipboard and 🎤" app:defaultValue="true" app:iconSpaceReserved="false" />
         <SwitchPreferenceCompat app:key="voice_typing" app:title="Voice typing (mic key)" app:dependency="utility_row"
             app:defaultValue="true" app:iconSpaceReserved="false" />
         <SwitchPreferenceCompat app:key="strip_icons" app:title="Clipboard &amp; AI buttons on suggestion bar"

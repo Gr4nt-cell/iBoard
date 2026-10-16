@@ -107,7 +107,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val t = KeyboardTheme.resolve(this, prefs)
         kbTheme = t
         val frame = FrameLayout(this)
-        frame.background = t.backgroundDrawable()
+        // A see-through gradient: the app shows behind the keyboard.
+        frame.background = t.backgroundDrawable().apply { alpha = (prefs.bgOpacity.coerceIn(0, 100) * 255) / 100 }
+        window?.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         val kv = KeyboardView(this, this).apply {
             theme = t
             showPreview = prefs.keyPopup

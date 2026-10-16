@@ -82,33 +82,37 @@ object Layouts {
             }
         }
 
-        // Bottom row, iOS style: 123 · emoji · (globe) · space · return
+        // Bottom row: 123 · , · space · . · return  (emoji moves to the glass capsule below)
         val bottom = mutableListOf<Key>()
         bottom += if (page == Page.LETTERS) Key(KeyType.TO_SYMBOLS, "123", 1.25f)
         else Key(KeyType.TO_LETTERS, if (lang == "ar") "أب" else "ABC", 1.25f)
-        bottom += Key(KeyType.EMOJI, width = 1.25f)
-        if (showGlobe && !utilityRow) bottom += Key(KeyType.GLOBE, width = 1.1f)
-        when (field) {
-            FieldKind.EMAIL -> {
-                bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
-                bottom += Key(KeyType.CHAR, "@", 1f)
-                bottom += Key(KeyType.CHAR, ".", 1f, listOf(".com", ".net", ".org", "…"))
-            }
-            FieldKind.URL -> {
-                bottom += Key(KeyType.CHAR, "/", 1f)
-                bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
-                bottom += Key(KeyType.CHAR, ".", 1f, listOf(".com", ".net", ".org", ".gh"))
-            }
-            FieldKind.TEXT -> bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
+        if (!utilityRow) {
+            bottom += Key(KeyType.EMOJI, width = 1.1f)
+            if (showGlobe) bottom += Key(KeyType.GLOBE, width = 1.1f)
         }
-        bottom += Key(KeyType.RETURN, width = 2.4f)
+        val comma = if (lang == "ar") "،" else ","
+        val left = when (field) {
+            FieldKind.EMAIL -> Key(KeyType.CHAR, "@", 1f)
+            FieldKind.URL -> Key(KeyType.CHAR, "/", 1f, listOf("\\", ":"))
+            FieldKind.TEXT -> Key(KeyType.CHAR, comma, 1f, listOf(";", ":", "-", "\"", if (lang == "ar") "," else "،"))
+        }
+        val period = when (field) {
+            FieldKind.TEXT -> Key(KeyType.CHAR, ".", 1f, listOf("…", "?", "!", "'", if (lang == "ar") "؟" else "¿"))
+            else -> Key(KeyType.CHAR, ".", 1f, listOf(".com", ".net", ".org", ".gh"))
+        }
+        bottom += left
+        bottom += Key(KeyType.SPACE, spaceLabel(lang), Key.FLEX)
+        bottom += period
+        bottom += Key(KeyType.RETURN, width = 2f)
         rows += KeyRow(bottom)
 
-        // iOS puts the globe and dictation mic below the keys; clipboard sits beside the globe.
+        // Globe, emoji, clipboard and mic share one Liquid Glass capsule under the keys.
         if (utilityRow) {
-            val util = mutableListOf(Key(KeyType.GLOBE, width = 1.5f), Key(KeyType.CLIPBOARD, width = 1.5f),
-                Key(KeyType.SPACER, width = Key.FLEX))
-            if (voice) util += Key(KeyType.MIC, width = 1.5f)
+            val util = mutableListOf(
+                Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
+                Key(KeyType.CLIPBOARD, width = Key.FLEX),
+            )
+            if (voice) util += Key(KeyType.MIC, width = Key.FLEX)
             rows += KeyRow(util, isUtility = true)
         }
 
