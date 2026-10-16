@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="Appearance" app:iconSpaceReserved="false">
+        <ListPreference
+            app:key="theme" app:title="Theme" app:defaultValue="system"
+            app:entries="@array/theme_entries" app:entryValues="@array/theme_values"
+            app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+        <ListPreference
+            app:key="gradient" app:title="Background gradient" app:defaultValue="blossom"
+            app:entries="@array/gradient_entries" app:entryValues="@array/gradient_values"
+            app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Keys" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat app:key="number_row" app:title="Number row" app:summary="Always show 1–0 above the letters" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="key_popup" app:title="Character preview" app:summary="Show the letter above your finger" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="haptics" app:title="Haptic feedback" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="sound" app:title="Key sounds" app:defaultValue="false" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Typing" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat app:key="auto_cap" app:title="Auto-capitalization" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="auto_correct" app:title="Auto-correction" app:summary="Fix typos when you press space (tap delete to undo)" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="double_space_period" app:title="“.” shortcut" app:summary="Double-tap space to add a period" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat app:key="learn_words" app:title="Learn my words" app:summary="Predictions adapt to how you type (stored only on this phone)" app:defaultValue="true" app:iconSpaceReserved="false" />
+        <Preference app:key="clear_learned" app:title="Reset learned words" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Languages" app:iconSpaceReserved="false">
+        <MultiSelectListPreference
+            app:key="languages" app:title="Keyboards" app:defaultValue="@array/default_langs"
+            app:entries="@array/lang_entries" app:entryValues="@array/lang_values"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="AI predictions" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat app:key="ai_enabled" app:title="AI word prediction"
+            app:summary="Context-aware next words, smarter corrections and phrase completion. Sends the text before the cursor to the AI provider you choose; never in password or incognito fields."
+            app:defaultValue="false" app:iconSpaceReserved="false" />
+        <ListPreference
+            app:key="ai_provider" app:title="Provider" app:defaultValue="anthropic"
+            app:entries="@array/ai_provider_entries" app:entryValues="@array/ai_provider_values"
+            app:useSimpleSummaryProvider="true" app:dependency="ai_enabled" app:iconSpaceReserved="false" />
+        <EditTextPreference app:key="ai_key" app:title="API key" app:dependency="ai_enabled" app:iconSpaceReserved="false" />
+        <EditTextPreference app:key="ai_model" app:title="Model" app:dependency="ai_enabled" app:iconSpaceReserved="false" />
+        <EditTextPreference app:key="ai_base_url" app:title="Base URL (OpenAI-compatible only)" app:dependency="ai_enabled" app:iconSpaceReserved="false" />
+        <Preference app:key="ai_test" app:title="Test connection" app:dependency="ai_enabled" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Clipboard" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat app:key="clipboard_history" app:title="Clipboard history"
+            app:summary="Keep the last 40 copied items; tap the clipboard icon on the suggestion bar" app:defaultValue="true" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="About" app:iconSpaceReserved="false">
+        <Preference app:key="about" app:title="iBoard" app:selectable="false" app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

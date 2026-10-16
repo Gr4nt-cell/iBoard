@@ -1,0 +1,97 @@
+package com.gr4nt.iboard
+
+import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+
+/** Colors for the glass keys and the soft gradient backdrop. */
+data class KeyboardTheme(
+    val dark: Boolean,
+    val gradient: IntArray,
+    val keyFill: Int,
+    val keyFillPressed: Int,
+    val specialFill: Int,
+    val specialFillPressed: Int,
+    val keyHighlightTop: Int,
+    val keyStroke: Int,
+    val keyShadow: Int,
+    val keyText: Int,
+    val keySubText: Int,
+    val accent: Int,
+    val accentText: Int,
+    val stripText: Int,
+    val stripDivider: Int,
+    val bubbleFill: Int,
+    val panelCard: Int,
+) {
+    fun backgroundDrawable(): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TL_BR, gradient)
+
+    companion object {
+        fun isNight(context: Context, prefs: Prefs): Boolean = when (prefs.theme) {
+            "light" -> false
+            "dark" -> true
+            else -> (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        }
+
+        fun resolve(context: Context, prefs: Prefs): KeyboardTheme {
+            val dark = isNight(context, prefs)
+            val g = gradientFor(prefs.gradient, dark)
+            return if (!dark) {
+                KeyboardTheme(
+                    dark = false,
+                    gradient = g,
+                    keyFill = Color.argb(200, 255, 255, 255),
+                    keyFillPressed = Color.argb(120, 255, 255, 255),
+                    specialFill = Color.argb(110, 255, 255, 255),
+                    specialFillPressed = Color.argb(225, 255, 255, 255),
+                    keyHighlightTop = Color.argb(150, 255, 255, 255),
+                    keyStroke = Color.argb(140, 255, 255, 255),
+                    keyShadow = Color.argb(38, 60, 40, 90),
+                    keyText = Color.rgb(28, 28, 30),
+                    keySubText = Color.argb(150, 28, 28, 30),
+                    accent = Color.rgb(0, 122, 255),
+                    accentText = Color.WHITE,
+                    stripText = Color.rgb(28, 28, 30),
+                    stripDivider = Color.argb(45, 60, 40, 90),
+                    bubbleFill = Color.argb(250, 255, 255, 255),
+                    panelCard = Color.argb(170, 255, 255, 255),
+                )
+            } else {
+                KeyboardTheme(
+                    dark = true,
+                    gradient = g,
+                    keyFill = Color.argb(60, 255, 255, 255),
+                    keyFillPressed = Color.argb(110, 255, 255, 255),
+                    specialFill = Color.argb(30, 255, 255, 255),
+                    specialFillPressed = Color.argb(80, 255, 255, 255),
+                    keyHighlightTop = Color.argb(40, 255, 255, 255),
+                    keyStroke = Color.argb(45, 255, 255, 255),
+                    keyShadow = Color.argb(90, 0, 0, 0),
+                    keyText = Color.WHITE,
+                    keySubText = Color.argb(160, 255, 255, 255),
+                    accent = Color.rgb(10, 132, 255),
+                    accentText = Color.WHITE,
+                    stripText = Color.WHITE,
+                    stripDivider = Color.argb(50, 255, 255, 255),
+                    bubbleFill = Color.argb(255, 70, 66, 92),
+                    panelCard = Color.argb(45, 255, 255, 255),
+                )
+            }
+        }
+
+        private fun gradientFor(name: String, dark: Boolean): IntArray = when (name) {
+            "ocean" -> if (dark) intArrayOf(0xFF0F2433.toInt(), 0xFF112B3A.toInt(), 0xFF0E1F2A.toInt())
+            else intArrayOf(0xFFCFE3F7.toInt(), 0xFFD5EEF0.toInt(), 0xFFD8F2E4.toInt())
+            "sunset" -> if (dark) intArrayOf(0xFF34202A.toInt(), 0xFF2E1D2E.toInt(), 0xFF1E1726.toInt())
+            else intArrayOf(0xFFF8DCCB.toInt(), 0xFFF3D3DC.toInt(), 0xFFE7D2EC.toInt())
+            "graphite" -> if (dark) intArrayOf(0xFF1F1F23.toInt(), 0xFF1A1A1E.toInt(), 0xFF141417.toInt())
+            else intArrayOf(0xFFE3E4E9.toInt(), 0xFFDCDDE3.toInt(), 0xFFD3D5DC.toInt())
+            // "blossom" – matches the soft pink→lavender→blue look of the dialer
+            else -> if (dark) intArrayOf(0xFF2B1E3A.toInt(), 0xFF221F3F.toInt(), 0xFF141A2E.toInt())
+            else intArrayOf(0xFFECD2EA.toInt(), 0xFFE2D8F2.toInt(), 0xFFD2DCF3.toInt())
+        }
+    }
+}

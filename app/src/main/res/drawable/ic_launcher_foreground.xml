@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- keyboard body -->
+    <path android:fillColor="#E6FFFFFF"
+        android:pathData="M30,40 L78,40 Q84,40 84,46 L84,66 Q84,72 78,72 L30,72 Q24,72 24,66 L24,46 Q24,40 30,40 Z" />
+    <!-- keys -->
+    <path android:fillColor="#7A6AD8"
+        android:pathData="M30,46h6v6h-6z M39,46h6v6h-6z M48,46h6v6h-6z M57,46h6v6h-6z M66,46h6v6h-6z M75,46h4v6h-4z
+                          M33,55h6v6h-6z M42,55h6v6h-6z M51,55h6v6h-6z M60,55h6v6h-6z M69,55h6v6h-6z
+                          M38,64h32v4h-32z" />
+</vector>

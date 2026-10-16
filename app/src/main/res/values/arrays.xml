@@ -1,0 +1,51 @@
+<resources>
+    <string-array name="theme_entries">
+        <item>Match system</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
+    <string-array name="theme_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+    <string-array name="lang_entries">
+        <item>English</item>
+        <item>Español</item>
+        <item>Français</item>
+        <item>Português</item>
+        <item>Deutsch</item>
+        <item>العربية (Arabic)</item>
+    </string-array>
+    <string-array name="lang_values">
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>pt</item>
+        <item>de</item>
+        <item>ar</item>
+    </string-array>
+    <string-array name="ai_provider_entries">
+        <item>Anthropic Claude</item>
+        <item>OpenAI-compatible (OpenAI, Gemini, Groq, OpenRouter…)</item>
+    </string-array>
+    <string-array name="ai_provider_values">
+        <item>anthropic</item>
+        <item>openai</item>
+    </string-array>
+    <string-array name="gradient_entries">
+        <item>Blossom (pink → lavender)</item>
+        <item>Ocean (blue → mint)</item>
+        <item>Sunset (peach → rose)</item>
+        <item>Graphite (neutral)</item>
+    </string-array>
+    <string-array name="gradient_values">
+        <item>blossom</item>
+        <item>ocean</item>
+        <item>sunset</item>
+        <item>graphite</item>
+    </string-array>
+    <string-array name="default_langs">
+        <item>en</item>
+    </string-array>
+</resources>
