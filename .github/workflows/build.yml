@@ -26,7 +26,20 @@ jobs:
       - name: Fetch whisper.cpp (offline speech engine)
         run: git clone --depth 1 --branch v1.7.6 https://github.com/ggml-org/whisper.cpp app/src/main/cpp/whisper.cpp
 
+      - name: Prepare upload key (when the repository secrets are set)
+        env:
+          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
+            echo "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+          fi
+
       - name: Build APK
+        env:
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
           set -o pipefail
           gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
@@ -53,9 +66,7 @@ jobs:
           UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
           UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
-          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
-            echo "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
-            export UPLOAD_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
+          if [ -n "$UPLOAD_KEYSTORE_PATH" ]; then
             NAME=iBoard-signed.aab
           else
             export IBOARD_UNSIGNED=1
