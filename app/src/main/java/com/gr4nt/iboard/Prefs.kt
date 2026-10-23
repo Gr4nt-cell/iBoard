@@ -2,11 +2,11 @@ package com.gr4nt.iboard
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.preference.PreferenceManager
 
 /** Typed access to every user setting. Keys match res/xml/prefs.xml. */
 class Prefs(context: Context) {
-    val sp: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+    // Same file the old preference library used, so existing settings carry over.
+    val sp: SharedPreferences = context.getSharedPreferences(context.packageName + "_preferences", Context.MODE_PRIVATE)
 
     val theme: String get() = sp.getString(THEME, "system") ?: "system"
     val gradient: String get() = sp.getString(GRADIENT, "blossom") ?: "blossom"
