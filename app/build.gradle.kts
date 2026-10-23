@@ -64,7 +64,10 @@ android {
             signingConfig = signingConfigs.getByName("iboard")
         }
         release {
-            isMinifyEnabled = false
+            // R8: shrink, optimise and obfuscate (Play's DEX optimisation check).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Sideload APK: fixed iboard key. Play bundle: upload key if given, otherwise left unsigned
             // (IBOARD_UNSIGNED=1) so it can be signed with the upload key afterwards.
             signingConfig = when {
@@ -91,12 +94,13 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.preference:preference-ktx:1.2.1")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("com.google.android.material:material:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // On-device LLM for Rambler clean-up (model downloaded in the app, not bundled).
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
