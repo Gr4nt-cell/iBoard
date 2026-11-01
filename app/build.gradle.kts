@@ -11,34 +11,11 @@ android {
         applicationId = "com.gr4nt.iboard"
         minSdk = 26
         targetSdk = 36
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        externalNativeBuild { cmake { cppFlags += "-std=c++17" } }
         versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
 
-        // Offline dictation runs whisper.cpp natively; 64-bit ARM covers practically all current phones.
-        ndk { abiFilters += listOf("arm64-v8a") }
-        externalNativeBuild {
-            cmake {
-                arguments += listOf("-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release")
-                cppFlags += listOf("-O3")
-            }
-        }
-    }
-
-    // Use the NDK already installed on the build machine (GitHub runners ship one).
-    (System.getenv("ANDROID_NDK_LATEST_HOME") ?: System.getenv("ANDROID_NDK_HOME"))
-        ?.takeIf { file(it).exists() }?.let { ndk ->
-            ndkPath = ndk
-            // Match ndkVersion to that NDK so AGP doesn't try to download another one.
-            file("$ndk/source.properties").takeIf { it.exists() }?.readLines()
-                ?.firstOrNull { it.startsWith("Pkg.Revision") }?.substringAfter("=")?.trim()
-                ?.let { ndkVersion = it }
-        }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     signingConfigs {
@@ -58,6 +35,9 @@ android {
             }
         }
     }
+
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
 
     buildTypes {
         debug {
@@ -89,7 +69,7 @@ android {
         buildConfig = true
     }
     androidResources {
-        noCompress += listOf("txt", "tsv")
+        noCompress += listOf("txt", "tsv", "bin")
     }
 }
 
@@ -100,6 +80,4 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    // On-device LLM for Rambler clean-up (model downloaded in the app, not bundled).
-    implementation("com.google.mediapipe:tasks-genai:0.10.24")
 }

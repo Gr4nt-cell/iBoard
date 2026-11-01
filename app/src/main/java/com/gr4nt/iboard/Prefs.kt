@@ -21,8 +21,8 @@ class Prefs(context: Context) {
     val clipboardHistory: Boolean get() = sp.getBoolean(CLIP_HISTORY, true)
 
     // Key customization
-    val keyStyle: String get() = sp.getString(KEY_STYLE, "solid") ?: "solid"
-    val keyRadius: Int get() = sp.getInt(KEY_RADIUS, 8)
+    val keyStyle: String get() = sp.getString(KEY_STYLE, "glass") ?: "glass"
+    val keyRadius: Int get() = sp.getInt(KEY_RADIUS, 12)
     val keyHeight: Int get() = sp.getInt(KEY_HEIGHT, 100)
     val keyTextSize: Int get() = sp.getInt(KEY_TEXT_SIZE, 100)
     val uppercaseLabels: Boolean get() = sp.getBoolean(UPPERCASE_LABELS, true)
@@ -30,15 +30,23 @@ class Prefs(context: Context) {
     val utilityRow: Boolean get() = sp.getBoolean(UTILITY_ROW, true)
     val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
     val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
-    val voiceTyping: Boolean get() = sp.getBoolean(VOICE_TYPING, true)
-    val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 45)
-    val aiConsent: Boolean get() = sp.getBoolean(AI_CONSENT, false)
-    val offlineDictation: Boolean get() = sp.getBoolean(OFFLINE_DICTATION, true)
-    val ramblerRewrite: Boolean get() = sp.getBoolean(RAMBLER_REWRITE, true)
-    val speechModel: String get() = sp.getString(SPEECH_MODEL, "whisper-base") ?: "whisper-base"
-    val rewriteModel: String get() = sp.getString(REWRITE_MODEL, "qwen-0.5b") ?: "qwen-0.5b"
-    val modelsWifiOnly: Boolean get() = sp.getBoolean(MODELS_WIFI_ONLY, true)
-    val emojiStyle: String get() = sp.getString(EMOJI_STYLE, "3d") ?: "3d"
+    val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 58)
+    val emojiStyle: String get() = sp.getString(EMOJI_STYLE, "bundled") ?: "bundled"
+
+    init {
+        // Retire provider credentials and model preferences on upgrade; typing stays local.
+        if (!sp.getBoolean("offline_keyboard_v1", false)) {
+            val legacy = context.getSharedPreferences("offline_models", Context.MODE_PRIVATE)
+            val pending = legacy.all.values.mapNotNull { it as? Long }.filter { it > 0 }.toLongArray()
+            if (pending.isNotEmpty()) runCatching { context.getSystemService(android.app.DownloadManager::class.java).remove(*pending) }
+            legacy.edit().clear().apply()
+            java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "models").deleteRecursively()
+            val edit = sp.edit()
+            sp.all.keys.filter { it.startsWith("ai_") || it in setOf("voice_typing", "mic_consent", "offline_dictation", "rambler_rewrite", "speech_model", "rewrite_model", "models_wifi_only") }.forEach { edit.remove(it) }
+            edit.putString(KEY_STYLE, "glass").putInt(KEY_RADIUS, 12).putString(EMOJI_STYLE, "bundled")
+                .putBoolean("offline_keyboard_v1", true).apply()
+        }
+    }
 
     val languages: List<String>
         get() {
@@ -51,23 +59,11 @@ class Prefs(context: Context) {
         get() = sp.getString(CURRENT_LANG, null)?.takeIf { it in languages } ?: languages.first()
         set(v) = sp.edit().putString(CURRENT_LANG, v).apply()
 
-    val aiEnabled: Boolean get() = sp.getBoolean(AI_ENABLED, false)
-    val aiProvider: String get() = sp.getString(AI_PROVIDER, "anthropic") ?: "anthropic"
-    val aiKey: String get() = (sp.getString(AI_KEY, "") ?: "").trim()
-    val aiModel: String
-        get() {
-            val m = (sp.getString(AI_MODEL, "") ?: "").trim()
-            if (m.isNotEmpty()) return m
-            return if (aiProvider == "anthropic") DEFAULT_CLAUDE_MODEL else ""
-        }
-    val aiBaseUrl: String
-        get() = (sp.getString(AI_BASE_URL, "") ?: "").trim().ifEmpty { "https://api.openai.com/v1" }
-
     /** A fingerprint of settings that require rebuilding the keyboard view. */
     fun visualSignature(night: Boolean): String =
         listOf(
             theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
-            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, voiceTyping, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
+            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
         ).joinToString("|")
 
     companion object {
@@ -84,11 +80,6 @@ class Prefs(context: Context) {
         const val CLIP_HISTORY = "clipboard_history"
         const val LANGUAGES = "languages"
         const val CURRENT_LANG = "current_language"
-        const val AI_ENABLED = "ai_enabled"
-        const val AI_PROVIDER = "ai_provider"
-        const val AI_KEY = "ai_key"
-        const val AI_MODEL = "ai_model"
-        const val AI_BASE_URL = "ai_base_url"
         const val KEY_STYLE = "key_style"
         const val KEY_RADIUS = "key_radius"
         const val KEY_HEIGHT = "key_height"
@@ -98,19 +89,10 @@ class Prefs(context: Context) {
         const val UTILITY_ROW = "utility_row"
         const val STRIP_ICONS = "strip_icons"
         const val ACCENT_COLOR = "accent_color"
-        const val VOICE_TYPING = "voice_typing"
         const val BG_OPACITY = "bg_opacity"
         const val HIDE_ICON = "hide_app_icon"
         const val EMOJI_STYLE = "emoji_style"
-        const val AI_CONSENT = "ai_consent"
-        const val MIC_CONSENT = "mic_consent"
-        const val OFFLINE_DICTATION = "offline_dictation"
-        const val RAMBLER_REWRITE = "rambler_rewrite"
-        const val SPEECH_MODEL = "speech_model"
-        const val REWRITE_MODEL = "rewrite_model"
-        const val MODELS_WIFI_ONLY = "models_wifi_only"
 
-        const val DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
         val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")
 
         fun languageLabel(code: String): String = when (code) {

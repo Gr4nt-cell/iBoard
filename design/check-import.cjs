@@ -1,0 +1,14 @@
+// Structural check using a local Figma scene-graph mock; not a real Figma import.
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');let id=0;const nodes=[];
+class Node{
+ constructor(type){this.type=type;this.id='mock:'+ ++id;this.children=[];this.fills=[];this.width=100;this.height=100;nodes.push(this);}
+ appendChild(n){if(n.parent)n.parent.children=n.parent.children.filter(c=>c!==n);n.parent=this;this.children.push(n);}
+ resize(w,h){assert(w>0&&h>0);this.width=w;this.height=h;}
+ findAll(f){return this.children.flatMap(n=>[...(f(n)?[n]:[]),...n.findAll(f)]);}
+ setExplicitVariableModeForCollection(c,m){this.mode=m;}
+ createInstance(){function clone(a){const b=new Node(a.type);for(const k of Object.keys(a))if(!['id','parent','children'].includes(k))b[k]=a[k];for(const c of a.children)b.appendChild(clone(c));return b;}const n=clone(this);n.type='INSTANCE';return n;}
+}
+const root=new Node('DOCUMENT'),variables=[];
+const make=t=>()=>new Node(t);
+const figma={root,listAvailableFontsAsync:async()=>['Regular','Medium','Bold'].map(style=>({fontName:{family:'Roboto',style}})),loadFontAsync:async()=>{},createPage(){const p=new Node('PAGE');root.appendChild(p);return p;},setCurrentPageAsync:async()=>{},createFrame:make('FRAME'),createText:make('TEXT'),createComponent:make('COMPONENT'),createRectangle:make('RECTANGLE'),createImage:()=>({hash:'glyph'}),createNodeFromSvg(svg){assert(svg.includes('viewBox'));const n=new Node('FRAME'),v=new Node('VECTOR');v.fills=[{type:'SOLID'}];n.appendChild(v);return n;},variables:{createVariableCollection(){return {id:'collection',defaultModeId:'light',renameMode(){},addMode:()=> 'dark'};},createVariable(name){const v={id:'var:'+variables.length,name,values:{},setValueForMode(mode,value){this.values[mode]=value;}};variables.push(v);return v;},setBoundVariableForPaint(p,field,v){return {...p,boundVariables:{[field]:v.id}};}},viewport:{scrollAndZoomIntoView(){}}};
+(async()=>{const source=fs.readFileSync('design/figma-liquid-glass.js','utf8').replace('console.log(await buildIBoard());','return await buildIBoard();');const r=await vm.runInNewContext('(async()=>{'+source+'})()',{figma});assert.equal(r.screenCount,10);assert(r.componentCount>=10);assert.equal(r.fontFamily,'Roboto');assert.equal(r.variableIds.length,8);assert(variables.every(v=>v.values.light&&v.values.dark));assert(nodes.filter(n=>n.type==='TEXT').every(n=>n.fontName.family==='Roboto'));assert(nodes.filter(n=>n.layoutMode).length>20);assert(nodes.filter(n=>n.fills.some(p=>p.type==='IMAGE')).every(n=>n.name.startsWith('Emoji / ')&&n.width<=40&&n.height<=40));assert(r.createdNodeIds.length>=nodes.length-1);console.log(JSON.stringify({mockExecution:true,screens:r.screenCount,components:r.componentCount,variables:r.variableIds.length,instances:nodes.filter(n=>n.type==='INSTANCE').length,font:r.fontFamily,glyphImages:nodes.filter(n=>n.fills.some(p=>p.type==='IMAGE')).length}));})();

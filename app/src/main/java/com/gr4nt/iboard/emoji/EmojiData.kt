@@ -15,15 +15,13 @@ object EmojiData {
 
     @Volatile
     private var cached: List<List<Emoji>>? = null
-    private var cachedArt = true
     private val paint = Paint()
 
     /** Categories 1..8 (index 0 here is "Smileys & People"). Call off the main thread. */
     fun categories(context: Context): List<List<Emoji>> {
-        if (cachedArt == EmojiImages.useArt) cached?.let { return it }
+        cached?.let { return it }
         synchronized(this) {
-            if (cachedArt == EmojiImages.useArt) cached?.let { return it }
-            cachedArt = EmojiImages.useArt
+            cached?.let { return it }
             EmojiImages.init(context)
             val cats = List(8) { ArrayList<Emoji>() }
             context.assets.open("emoji.tsv").bufferedReader(Charsets.UTF_8).useLines { lines ->
@@ -31,7 +29,7 @@ object EmojiData {
                     val p = line.split('\t')
                     if (p.size >= 4) {
                         val c = p[0].toIntOrNull() ?: return@forEach
-                        if (c in 0..7 && (EmojiImages.has(p[1]) || canDraw(p[1]))) cats[c] += Emoji(p[1], p[2] == "1", p[3])
+                        if (c in 0..7 && EmojiImages.has(p[1])) cats[c] += Emoji(p[1], p[2] == "1", p[3])
                     }
                 }
             }
@@ -90,7 +88,7 @@ object EmojiData {
         var rest = e.substring(n)
         if (rest.startsWith("️")) rest = rest.substring(1)
         val out = e.substring(0, n) + tone + rest
-        return if (EmojiImages.has(out) || canDraw(out)) out else e
+        return if (EmojiImages.has(out)) out else e
     }
 }
 

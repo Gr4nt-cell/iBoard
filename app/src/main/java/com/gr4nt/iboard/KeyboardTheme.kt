@@ -77,9 +77,9 @@ data class KeyboardTheme(
             accent = Color.rgb(10, 132, 255),
             accentText = Color.WHITE,
             stripText = Color.WHITE,
-            stripDivider = Color.argb(60, 255, 255, 255),
+            stripDivider = Color.argb(48, 219, 231, 255),
             bubbleFill = Color.rgb(110, 110, 116),
-            panelCard = Color.argb(60, 255, 255, 255),
+            panelCard = Color.argb(48, 219, 231, 255),
         )
 
         private fun accentFor(name: String, dark: Boolean): Int {
@@ -100,12 +100,12 @@ data class KeyboardTheme(
                 KeyboardTheme(
                     dark = false,
                     gradient = g,
-                    keyFill = Color.argb(200, 255, 255, 255),
+                    keyFill = Color.argb(158, 255, 255, 255),
                     keyFillPressed = Color.argb(120, 255, 255, 255),
-                    specialFill = Color.argb(110, 255, 255, 255),
+                    specialFill = Color.argb(105, 255, 255, 255),
                     specialFillPressed = Color.argb(225, 255, 255, 255),
                     keyHighlightTop = Color.argb(150, 255, 255, 255),
-                    keyStroke = Color.argb(140, 255, 255, 255),
+                    keyStroke = Color.argb(195, 255, 255, 255),
                     keyShadow = Color.argb(38, 60, 40, 90),
                     keyText = Color.rgb(28, 28, 30),
                     keySubText = Color.argb(150, 28, 28, 30),
@@ -120,12 +120,12 @@ data class KeyboardTheme(
                 KeyboardTheme(
                     dark = true,
                     gradient = g,
-                    keyFill = Color.argb(60, 255, 255, 255),
-                    keyFillPressed = Color.argb(110, 255, 255, 255),
+                    keyFill = Color.argb(48, 219, 231, 255),
+                    keyFillPressed = Color.argb(105, 255, 255, 255),
                     specialFill = Color.argb(30, 255, 255, 255),
                     specialFillPressed = Color.argb(80, 255, 255, 255),
                     keyHighlightTop = Color.argb(40, 255, 255, 255),
-                    keyStroke = Color.argb(45, 255, 255, 255),
+                    keyStroke = Color.argb(90, 219, 231, 255),
                     keyShadow = Color.argb(90, 0, 0, 0),
                     keyText = Color.WHITE,
                     keySubText = Color.argb(160, 255, 255, 255),
@@ -134,7 +134,7 @@ data class KeyboardTheme(
                     stripText = Color.WHITE,
                     stripDivider = Color.argb(50, 255, 255, 255),
                     bubbleFill = Color.argb(255, 70, 66, 92),
-                    panelCard = Color.argb(45, 255, 255, 255),
+                    panelCard = Color.argb(90, 219, 231, 255),
                 )
             }
         }

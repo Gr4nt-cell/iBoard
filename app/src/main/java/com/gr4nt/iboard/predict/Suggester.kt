@@ -7,7 +7,7 @@ data class Suggestion(
     /** True when this word will replace the typed word on space (autocorrect). */
     val autoCorrect: Boolean = false,
 ) {
-    enum class Kind { LITERAL, WORD, AI, PHRASE, CLIP }
+    enum class Kind { LITERAL, WORD, CLIP }
 }
 
 /**
@@ -21,7 +21,8 @@ class Suggester(
 ) {
     class Result(val items: List<Suggestion>, val autoCorrect: String?)
 
-    fun forWord(typed: String, previous: String?, allowAutoCorrect: Boolean, sentenceStart: Boolean = false): Result {
+    fun forWord(typed: String, previous: String?, allowAutoCorrect: Boolean, sentenceStart: Boolean = false, previousPrevious: String? = null): Result {
+        if (typed.isEmpty()) return Result(nextWords(previous, sentenceStart, previousPrevious), null)
         if (dictionary.lang == "en" && typed.lowercase() in ENGLISH_I && typed[0] == 'i') {
             val fixed = "I" + typed.substring(1)
             return Result(
@@ -34,7 +35,7 @@ class Suggester(
         val apo = typed.lastIndexOf('\'')
         if (apo in 1..3 && apo < typed.length - 1 && dictionary.score(typed) == null) {
             val head = typed.substring(0, apo + 1)
-            val r = forWord(typed.substring(apo + 1), previous, allowAutoCorrect, false)
+            val r = forWord(typed.substring(apo + 1), previous, allowAutoCorrect, false, previousPrevious)
             return Result(
                 r.items.map { it.copy(text = if (it.text.startsWith(head)) it.text else head + it.text) },
                 r.autoCorrect?.let { head + it },
@@ -57,7 +58,7 @@ class Suggester(
         fun add(word: String, score: Float) {
             val key = word.lowercase()
             if (key == lower) return
-            val s = score + boost(previous, word)
+            val s = score + boost(previous, word, previousPrevious)
             if ((scored[word] ?: Float.NEGATIVE_INFINITY) < s) scored[word] = s
         }
 
@@ -65,11 +66,13 @@ class Suggester(
             // Completions are slightly penalized per missing letter so short exact-ish words win.
             add(w, s - 0.12f * (w.length - typed.length))
         }
+        dictionary.contextModel.predict(previous, previousPrevious).filter { Dictionary.normalize(it.first).startsWith(norm) }
+            .forEach { (word, _) -> add(word, dictionary.score(word) ?: 3f) }
         user.prefixed(lower, 5).forEach { (w, c) -> add(w, 3.5f + minOf(c, 30) * 0.15f) }
 
         var corrections = emptyList<Dictionary.Correction>()
         if (typed.length >= 2 && typed.all { it.isLetter() || it == '\'' || it == '-' }) {
-            corrections = dictionary.corrections(typed, neighbors, 6)
+            corrections = dictionary.corrections(typed, neighbors, 12).sortedByDescending { it.score - it.distance * 2.4f + boost(previous, it.word, previousPrevious) }
             corrections.forEach { add(it.word, it.score - it.distance * 2.4f + 0.4f) }
         }
 
@@ -113,9 +116,15 @@ class Suggester(
         return Result(items, auto?.let { applyCase(typed, it) })
     }
 
-    fun nextWords(previous: String?, sentenceStart: Boolean): List<Suggestion> {
+    fun nextWords(previous: String?, sentenceStart: Boolean, previousPrevious: String? = null): List<Suggestion> {
         val out = LinkedHashSet<String>()
-        user.nextWords(previous, 6).forEach { out += it.first }
+        user.nextWords(previous, 6, previousPrevious).forEach { out += it.first }
+        if (!sentenceStart) {
+            // Curated greetings remain reliable; the trained model fills in broad conversational contexts.
+            dictionary.contextWords[previous?.lowercase()]?.forEach { out += it.first }
+            dictionary.contextModel.predict(previous, previousPrevious).forEach { out += it.first }
+        }
+        if (!sentenceStart) dictionary.contextWords[previous?.lowercase()]?.forEach { out += it.first }
         if (out.size < 3) {
             val fallback = if (sentenceStart) STARTERS[dictionary.lang] ?: emptyList()
             else dictionary.topWords
@@ -129,10 +138,13 @@ class Suggester(
         }
     }
 
-    private fun boost(previous: String?, word: String): Float {
+    private fun boost(previous: String?, word: String, previousPrevious: String? = null): Float {
         val b = user.bigramCount(previous, word)
         val u = user.count(word)
-        return minOf(b, 20) * 0.35f + minOf(u, 50) * 0.04f
+        val tri = user.trigramCount(previousPrevious, previous, word)
+        val builtIn = dictionary.contextWords[previous?.lowercase()]?.firstOrNull { it.first.equals(word, true) }?.second ?: 0f
+        val context = dictionary.contextModel.predict(previous, previousPrevious).firstOrNull { it.first.equals(word, true) }?.second ?: 0f
+        return context * 4f + minOf(b, 20) * 0.35f + minOf(tri, 10) * 0.65f + minOf(u, 50) * 0.04f + builtIn
     }
 
     companion object {

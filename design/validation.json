@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-01",
+  "version": "1.0.27",
+  "tests": {
+    "prediction_persistence_geometry_checks": 37738,
+    "layout_combinations": 96,
+    "capture_lifecycle_checks": 71
+  },
+  "speech": {
+    "engine": "whisper.cpp v1.7.6",
+    "model": "Whisper Base multilingual Q5_1",
+    "smoke_test": "whisper.cpp samples/jfk.wav transcribed successfully offline on build host",
+    "android_device_tested": false,
+    "production_kotlin_jni_test": true,
+    "jni_timeout_test": true,
+    "jni_concurrent_cancel_close_test": true,
+    "native_optimization_verified": "-O3 on whisper, ggml-base and ggml-cpu in all three Android ABIs",
+    "decoding": "greedy, best_of=1, no repeated temperature fallback",
+    "chunk_seconds_max": 8,
+    "decode_deadline_seconds": 45,
+    "capture": "nonblocking reads; sample-based timing; thread-owned release",
+    "device_issue": "User reported listening followed by stuck finalizing",
+    "confirmed_build_defect": "v25 debug APK compiled transformer and ggml CPU kernels without optimization"
+  },
+  "prediction": {
+    "type": "corpus-trained interpolated trigram plus dictionaries and local learning",
+    "languages": 6,
+    "training_sentences": 806666,
+    "bigrams": 198851,
+    "trigrams": 367719,
+    "commercial_comparison": false
+  },
+  "figma": {
+    "canvas_updated": false,
+    "blocker": "Collab seat MCP call limit",
+    "mock_screens": 10,
+    "mock_components": 26,
+    "mock_variables": 8,
+    "mock_instances": 383,
+    "font": "Roboto",
+    "visual_reference_inspected": true,
+    "utility_capsule": "Compact centered 252dp portrait capsule: five 44dp touch targets, 8dp gaps; compact landscape groups; minimum 16dp edge inset",
+    "capsule_preview_inspected": true
+  },
+  "github": {
+    "published": false,
+    "blocker": "403 Resource not accessible by integration",
+    "local_branch": "gpt"
+  },
+  "limits": [
+    "No physical Android microphone/rotation/permission/blur validation",
+    "Host speech smoke test is not an accuracy benchmark",
+    "Held-out corpus figures are not real-world commercial keyboard comparisons"
+  ]
+}

@@ -1,101 +1,38 @@
 package com.gr4nt.iboard.emoji
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
-import android.util.LruCache
+import android.graphics.Typeface
 
-/**
- * Glossy 3D emoji art (Microsoft Fluent Emoji, MIT licence) bundled as small WebP files.
- * Emoji without art (mostly flags) fall back to the phone's emoji font.
- */
+/** Draws complete Unicode emoji sequences using the bundled color font, without bitmap artwork. */
 object EmojiImages {
-    @Volatile
-    private var available: Set<String>? = null
-    private val cache = object : LruCache<String, Bitmap>(6 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
-    }
-    // Emoji are drawn 10% less saturated for a softer look.
-    private val softer = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setSaturation(0.9f) })
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { colorFilter = softer }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; colorFilter = softer }
-    private val rect = RectF()
-
-    /** False when the user picked "Phone's emoji font": everything is drawn with the system font. */
-    @Volatile
-    var useArt = true
-
-    /** An emoji font the user imported from their phone (Settings › Emoji › Import Emoji Font). */
-    @Volatile
-    var customTypeface: android.graphics.Typeface? = null
+    @Volatile var customTypeface: Typeface? = null
         private set
+    private var supported: Set<String> = emptySet()
+    private var imported = false
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
     fun customFontFile(context: Context) = java.io.File(context.filesDir, "custom_emoji.ttf")
 
-    /** Applies the Emoji Style setting: "3d", "system" or "custom". */
     fun configure(context: Context, style: String) {
-        customTypeface = if (style == "custom") {
-            try {
-                customFontFile(context).takeIf { it.exists() }?.let { android.graphics.Typeface.createFromFile(it) }
-            } catch (_: Exception) {
-                null
-            }
-        } else null
-        useArt = style == "3d"
-        textPaint.typeface = customTypeface
+        imported = style == "custom" && customFontFile(context).exists()
+        customTypeface = if (imported) runCatching { Typeface.createFromFile(customFontFile(context)) }.getOrNull() else null
+        if (customTypeface == null) {
+            imported = false
+            customTypeface = Typeface.createFromAsset(context.assets, "fonts/ios-style.ttf")
+        }
+        supported = context.assets.open("fonts/supported_emoji.txt").bufferedReader().useLines { it.toSet() }
+        paint.typeface = customTypeface
         EmojiData.setTypeface(customTypeface)
     }
+    fun init(context: Context) { if (customTypeface == null) configure(context, "bundled") }
+    fun key(emoji: String): String = emoji.codePoints().toArray().filter { it != 0xFE0F }.joinToString("_") { Integer.toHexString(it) }
+    fun has(emoji: String): Boolean = if (imported) paint.hasGlyph(emoji) else key(emoji) in supported
 
-    /** Lists the bundled art once. Safe to call from any thread. */
-    fun init(context: Context) {
-        if (available != null) return
-        synchronized(this) {
-            if (available != null) return
-            available = context.assets.list("emoji3d")?.map { it.removeSuffix(".webp") }?.toHashSet() ?: emptySet()
-        }
-    }
-
-    fun key(emoji: String): String {
-        val sb = StringBuilder()
-        var i = 0
-        while (i < emoji.length) {
-            val cp = emoji.codePointAt(i)
-            if (cp != 0xFE0F) {
-                if (sb.isNotEmpty()) sb.append('_')
-                sb.append(Integer.toHexString(cp))
-            }
-            i += Character.charCount(cp)
-        }
-        return sb.toString()
-    }
-
-    fun has(emoji: String): Boolean = useArt && available?.contains(key(emoji)) == true
-
-    fun bitmap(context: Context, emoji: String): Bitmap? {
-        if (!useArt) return null
-        val k = key(emoji)
-        cache.get(k)?.let { return it }
-        if (available?.contains(k) != true) return null
-        return try {
-            context.assets.open("emoji3d/$k.webp").use { BitmapFactory.decodeStream(it) }?.also { cache.put(k, it) }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /** Draws [emoji] centered in a square of side [size]: 3D art when bundled, the font otherwise. */
     fun draw(context: Context, canvas: Canvas, emoji: String, cx: Float, cy: Float, size: Float) {
-        val bmp = bitmap(context, emoji)
-        if (bmp != null) {
-            val h = size / 2f
-            rect.set(cx - h, cy - h, cx + h, cy + h)
-            canvas.drawBitmap(bmp, null, rect, paint)
-        } else {
-            textPaint.textSize = size * 0.82f
-            canvas.drawText(emoji, cx, cy - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
-        }
+        init(context)
+        paint.textSize = size * 0.9f
+        canvas.drawText(emoji, cx, cy - (paint.descent() + paint.ascent()) / 2f, paint)
     }
 }

@@ -17,7 +17,18 @@ class Dictionary private constructor(
     private val scores: FloatArray,
     private val lookup: HashMap<String, Float>,
     val topWords: List<String>,
+    val contextWords: Map<String, List<Pair<String, Float>>>,
+    val contextModel: ContextModel,
 ) {
+    private val missingFirst by lazy {
+        val index = HashMap<String, MutableList<Int>>()
+        keys.forEachIndexed { i, key -> if (key.length > 2) index.getOrPut(key.drop(1).take(3)) { ArrayList() }.add(i) }
+        index
+    }
+    private val correctionCache = object : LinkedHashMap<String, List<Correction>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Correction>>?) = size > 64
+    }
+
     fun score(word: String): Float? = lookup[word.lowercase()] ?: lookup[word]
 
     fun contains(word: String): Boolean = score(word) != null
@@ -42,31 +53,39 @@ class Dictionary private constructor(
     fun corrections(typed: String, neighbors: Map<Char, String>, limit: Int): List<Correction> {
         val t = typed.lowercase()
         if (t.length < 2) return emptyList()
+        val cacheKey = "$t|$limit"
+        correctionCache[cacheKey]?.let { return it }
         val firstKey = normalize(t.substring(0, 1))
         val starts = LinkedHashSet<String>()
         starts += firstKey
+        // An extra leading letter or a transposed first pair can change the first-key bucket.
+        if (t.length > 2) starts += normalize(t.substring(1, 2))
         neighbors[t[0]]?.forEach { starts += normalize(it.toString()) }
         val maxDist = when {
             t.length <= 3 -> 1.0f
             t.length <= 6 -> 1.6f
             else -> 2.2f
         }
+        val candidateIds = LinkedHashSet<Int>()
+        for (prefix in starts) {
+            if (prefix.isEmpty()) continue
+            var i = lowerBound(prefix)
+            while (i < keys.size && keys[i].startsWith(prefix)) { candidateIds += i; i++ }
+        }
+        // Recover a missing first letter, which a first-letter-only scan cannot find.
+        missingFirst[normalize(t).take(3)]?.let { candidateIds.addAll(it) }
         val out = ArrayList<Correction>()
-        for (s in starts) {
-            if (s.isEmpty()) continue
-            var i = lowerBound(s)
-            val penalty = if (s == firstKey) 0f else 0.6f
-            while (i < keys.size && keys[i].startsWith(s)) {
-                val w = words[i]
-                if (abs(w.length - t.length) <= 2 && w != t) {
-                    val d = distance(t, w, neighbors, maxDist - penalty) + penalty
-                    if (d <= maxDist) out += Correction(w, d, scores[i])
-                }
-                i++
+        for (i in candidateIds) {
+            val w = words[i]
+            if (abs(w.length - t.length) <= 2 && w != t) {
+                val d = distance(t, w, neighbors, maxDist)
+                if (d <= maxDist) out += Correction(w, d, scores[i])
             }
         }
         out.sortBy { it.distance * 2.4f - it.score }
-        return if (out.size > limit) out.subList(0, limit) else out
+        val result = out.take(limit)
+        correctionCache[cacheKey] = result
+        return result
     }
 
     private fun lowerBound(prefix: String): Int {
@@ -121,7 +140,22 @@ class Dictionary private constructor(
                 FloatArray(order.size) { rawScores[order[it].second] },
                 lookup,
                 top,
+                loadContext(context, lang),
+                ContextModel.load(context, lang),
             )
+        }
+
+        private fun loadContext(context: Context, lang: String): Map<String, List<Pair<String, Float>>> {
+            val pairs = HashMap<String, MutableList<Pair<String, Float>>>()
+            runCatching {
+                context.assets.open("dict/${lang}_bigrams.tsv").bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val p = line.split('\t')
+                        if (p.size == 3) pairs.getOrPut(p[0].lowercase()) { ArrayList() }.add(p[1] to (p[2].toFloatOrNull() ?: 1f))
+                    }
+                }
+            }
+            return pairs.mapValues { it.value.sortedByDescending { pair -> pair.second } }
         }
 
         private fun insertTop(list: ArrayList<Pair<String, Float>>, item: Pair<String, Float>, limit: Int) {

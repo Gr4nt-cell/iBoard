@@ -25,14 +25,6 @@
         <item>de</item>
         <item>ar</item>
     </string-array>
-    <string-array name="ai_provider_entries">
-        <item>Anthropic Claude</item>
-        <item>OpenAI-compatible (OpenAI, Gemini, Groq, OpenRouter…)</item>
-    </string-array>
-    <string-array name="ai_provider_values">
-        <item>anthropic</item>
-        <item>openai</item>
-    </string-array>
     <string-array name="gradient_entries">
         <item>Blossom (pink → lavender)</item>
         <item>Ocean (blue → mint)</item>

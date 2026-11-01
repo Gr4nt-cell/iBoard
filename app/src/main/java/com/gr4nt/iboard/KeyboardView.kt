@@ -39,11 +39,10 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onCursorMove(steps: Int)
         fun onSuggestion(index: Int)
         fun onClipboardButton()
-        fun onAiButton()
+        fun onSettingsButton()
         fun onKeyFeedback(key: Key)
         fun onEmojiResult(text: String)
         fun onEmojiSearchClose()
-        fun onChip(index: Int)
     }
 
     private val d = resources.displayMetrics.density
@@ -60,26 +59,21 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         set(v) { field = v; invalidate() }
     var returnAccent = false
         set(v) { field = v; invalidate() }
+    var voiceStatus: String? = null
+        set(v) { field = v; invalidate() }
+    var voiceActive: Boolean = false
+        set(v) { field = v; invalidate() }
     var suggestions: List<Suggestion> = emptyList()
         set(v) { field = v; invalidate() }
-    var aiActive = false
-        set(v) { field = v; invalidate() }
-    var aiBusy = false
-        set(v) { if (field != v) { field = v; invalidate() } }
     var languageLabel: String = ""
     var returnIcon: Icons.Kind? = null
-        set(v) { field = v; invalidate() }
-    var listening = false
-        set(v) { field = v; invalidate() }
-    /** Replaces the suggestions with a message (e.g. live dictation text). */
-    var statusText: String? = null
         set(v) { field = v; invalidate() }
     private var spaceFlashUntil = 0L
 
     /** How the keys look, from the "Key customization" settings. */
     data class Look(
-        val solid: Boolean = true,
-        val radiusDp: Int = 8,
+        val solid: Boolean = false,
+        val radiusDp: Int = 12,
         val heightPct: Int = 100,
         val textPct: Int = 100,
         val uppercase: Boolean = true,
@@ -106,7 +100,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     // --- geometry ---
     /** The bar grows to two rows (search field + results) while searching emoji. */
-    private val stripH get() = if (emojiQuery != null) 98 * d else 44 * d
+    private val stripH get() = if (emojiQuery != null) 98 * d else (if (compactLandscape) 38 else 48) * d
 
     /** Non-null while the user is searching emoji; typed letters go into this query. */
     var emojiQuery: String? = null
@@ -119,14 +113,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     var emojiResults: List<String> = emptyList()
         set(v) { field = v; invalidate() }
 
-    /** Tappable chips shown in the suggestion bar (the ✨ AI menu, translation targets, undo). */
-    var chips: List<String>? = null
-        set(v) { field = v; invalidate() }
-    /** Index of the chip drawn highlighted (e.g. "Predictions: On"). */
-    var chipAccent = -1
     private val sidePad = 3 * d
     private val keyGap = 6 * d
-    private val rowGap = 10 * d
+    private val splitMode get() = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    private val compactLandscape get() = splitMode && resources.configuration.screenHeightDp < 500
+    private val rowGap get() = (if (compactLandscape) 6 else 10) * d
     private val topPad = 4 * d
     private val bottomPad = 6 * d
     private var keyH = 45 * d
@@ -139,6 +130,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private val boxes = ArrayList<KeyBox>()
     private val capsule = RectF()
+    private val utilityCapsules = HashMap<Int, List<RectF>>()
     private var capsuleShader: Shader? = null
     private val rowBounds = ArrayList<Pair<Float, Float>>()
 
@@ -193,8 +185,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun rowHeight(r: KeyRow) = when {
         r.isUtility -> utilH
-        r.isNumberRow -> numKeyH
-        else -> keyH
+        r.isNumberRow -> if (compactLandscape) max(28 * d, numKeyH * 0.78f) else numKeyH
+        else -> if (compactLandscape) max(32 * d, keyH * 0.78f) else keyH
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -202,44 +194,20 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun computeKeys() {
-        boxes.clear(); rowBounds.clear()
+        boxes.clear(); rowBounds.clear(); utilityCapsules.clear(); capsuleShader = null
         val l = layout ?: return
         val w = width.toFloat()
         if (w <= 0f) return
-        val unit = (w - 2 * sidePad - (l.unitsPerRow - 1) * keyGap) / l.unitsPerRow
         var y = stripH + topPad
         l.rows.forEachIndexed { ri, row ->
             val h = rowHeight(row)
             if (row.isUtility) y -= rowGap / 2f
-            val fixed = row.keys.filter { it.width != Key.FLEX }.sumOf { it.width.toDouble() }.toFloat()
-            val flexCount = row.keys.count { it.width == Key.FLEX }
-            val flexUnits = if (flexCount > 0) max(1f, (l.unitsPerRow - fixed) / flexCount) else 0f
+            val placements = KeyGeometry.row(row.keys, w, d, splitMode, l.unitsPerRow, row.isUtility)
+            placements.forEach { boxes += KeyBox(it.key, RectF(it.left, y, it.right, y + h), ri) }
             if (row.isUtility) {
-                // A slim, centered rounded bar holding the icons (fixed slot per icon).
-                val slot = min(52 * d, (w - 2 * sidePad - 24 * d) / row.keys.size)
-                val total = slot * row.keys.size
-                var x = (w - total) / 2f
-                for (k in row.keys) {
-                    boxes += KeyBox(k, RectF(x, y, x + slot, y + h), ri)
-                    x += slot
+                utilityCapsules[ri] = KeyGeometry.utilityPanels(placements, w, splitMode).map { (left, right) ->
+                    RectF(left, y + 3 * d, right, y + h - 3 * d)
                 }
-                val capH = 36 * d
-                val top = y + (h - capH) / 2f
-                capsule.set((w - total) / 2f - 10 * d, top, (w + total) / 2f + 10 * d, top + capH)
-                capsuleShader = null
-                rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
-                y += h + rowGap
-                return@forEachIndexed
-            }
-            val widths = row.keys.map { k ->
-                val u = if (k.width == Key.FLEX) flexUnits else k.width
-                u * unit + (u - 1) * keyGap
-            }
-            val total = widths.sum() + (row.keys.size - 1) * keyGap
-            var x = (w - total) / 2f
-            for (i in row.keys.indices) {
-                boxes += KeyBox(row.keys[i], RectF(x, y, x + widths[i], y + h), ri)
-                x += widths[i] + keyGap
             }
             rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
             y += h + rowGap
@@ -259,6 +227,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val now = SystemClock.uptimeMillis()
         val rows = layout?.rows?.size ?: 0
         var animating = false
+        var paintedUtilityRow = -1
         for (b in boxes) {
             val t = if (animStart == 0L) 1f else {
                 val fromBottom = rows - 1 - b.row
@@ -270,6 +239,13 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val dy = (1f - t) * 26 * d * (1 + b.row)
             canvas.save()
             canvas.translate(0f, dy)
+            if (paintedUtilityRow != b.row && utilityCapsules.containsKey(b.row)) {
+                for (panel in utilityCapsules.getValue(b.row)) {
+                    capsule.set(panel)
+                    drawCapsule(canvas, t)
+                }
+                paintedUtilityRow = b.row
+            }
             drawKey(canvas, b, t)
             canvas.restore()
         }
@@ -291,22 +267,21 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val pressed = isPressed(b)
         if (k.type == KeyType.SPACER) return
         if (layout?.rows?.getOrNull(b.row)?.isUtility == true) {
-            if (boxes.firstOrNull { it.row == b.row } === b) drawCapsule(canvas, alpha)
-            if (pressed) {
-                fillPaint.color = if (theme.dark) 0x33FFFFFF else 0x22000000
-                tmpRect.set(r.left + 4 * d, capsule.top + 4 * d, r.right - 4 * d, capsule.bottom - 4 * d)
+            if (pressed || (k.type == KeyType.MIC && voiceActive)) {
+                fillPaint.color = if (k.type == KeyType.MIC && voiceActive) theme.accent.withAlpha(0.18f) else if (theme.dark) 0x33FFFFFF else 0x22000000
+                tmpRect.set(r.left + 4 * d, r.top + 6 * d, r.right - 4 * d, r.bottom - 6 * d)
                 val rr = tmpRect.height() * 0.42f
                 canvas.drawRoundRect(tmpRect, rr, rr, fillPaint)
             }
             val kind = when (k.type) {
+                KeyType.MIC -> Icons.Kind.MIC
                 KeyType.GLOBE -> Icons.Kind.GLOBE
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
                 KeyType.EMOJI -> Icons.Kind.EMOJI
-                KeyType.AI -> Icons.Kind.SPARKLE
                 KeyType.SETTINGS -> Icons.Kind.GEAR
-                else -> Icons.Kind.MIC
+                else -> Icons.Kind.GEAR
             }
-            val color = if ((k.type == KeyType.MIC && listening) || (k.type == KeyType.AI && (aiActive || aiBusy))) theme.accent else theme.keyText.withAlpha(0.85f * alpha)
+            val color = (if (k.type == KeyType.MIC && voiceActive) theme.accent else theme.keyText).withAlpha(0.9f * alpha)
             Icons.draw(canvas, kind, r.centerX(), r.centerY(), min(r.height() * 0.62f, 26 * d), color)
             return
         }
@@ -384,6 +359,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             )
             KeyType.BACKSPACE -> Icons.draw(canvas, Icons.Kind.BACKSPACE, cx, cy, iconSize, fgA)
             KeyType.EMOJI -> Icons.draw(canvas, Icons.Kind.EMOJI, cx, cy, iconSize, fgA)
+            KeyType.MIC -> Icons.draw(canvas, Icons.Kind.MIC, cx, cy, iconSize, if (voiceActive) theme.accent else fgA)
             KeyType.GLOBE -> Icons.draw(canvas, Icons.Kind.GLOBE, cx, cy, iconSize, fgA)
             KeyType.RETURN -> {
                 val label = returnLabel
@@ -587,38 +563,22 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         }
     }
 
-    private fun drawChips(canvas: Canvas, list: List<String>) {
-        val pad = 6 * d
-        val w = (width - pad * 2) / list.size
-        stripPaint.typeface = medium
-        list.forEachIndexed { i, c ->
-            val l = pad + w * i
-            tmpRect.set(l + 3 * d, 7 * d, l + w - 3 * d, stripH - 7 * d)
-            fillPaint.color = when {
-                stripPressed == 300 + i -> theme.keyFillPressed
-                i == chipAccent -> theme.accent
-                else -> if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
-            }
-            canvas.drawRoundRect(tmpRect, tmpRect.height() / 2f, tmpRect.height() / 2f, fillPaint)
-            stripPaint.color = if (i == chipAccent && stripPressed != 300 + i) theme.accentText else theme.stripText
-            val label = TextUtils.ellipsize(c, stripPaint, tmpRect.width() - 10 * d, TextUtils.TruncateAt.END).toString()
-            canvas.drawText(label, tmpRect.centerX(), baseline(tmpRect.centerY(), stripPaint), stripPaint)
-        }
-    }
-
     private fun drawStrip(canvas: Canvas) {
         emojiQuery?.let { drawEmojiSearch(canvas, it); return }
-        if (statusText == null) chips?.let { drawChips(canvas, it); return }
-        statusText?.let { msg ->
-            stripPaint.typeface = medium
+        tmpRect.set(8 * d, 3 * d, width - 8 * d, stripH - 3 * d)
+        fillPaint.color = if (theme.dark) 0x16FFFFFF else 0x4DFFFFFF
+        canvas.drawRoundRect(tmpRect, 20 * d, 20 * d, fillPaint)
+        strokePaint.color = theme.keyStroke.withAlpha(0.45f)
+        canvas.drawRoundRect(tmpRect, 20 * d, 20 * d, strokePaint)
+        if (look.stripIcons && voiceStatus == null) drawStripIcons(canvas)
+        val status = voiceStatus
+        if (status != null) {
             stripPaint.color = theme.stripText
-            Icons.draw(canvas, Icons.Kind.MIC, 22 * d, stripH / 2f, 18 * d, theme.accent)
-            val t = TextUtils.ellipsize(msg, stripPaint, width - 70 * d, TextUtils.TruncateAt.START).toString()
-            canvas.drawText(t, width / 2f, baseline(stripH / 2f, stripPaint), stripPaint)
-            return
-        }
-        if (look.stripIcons) drawStripIcons(canvas)
-        drawSuggestions(canvas)
+            stripPaint.typeface = medium
+            stripPaint.textAlign = Paint.Align.CENTER
+            val label = TextUtils.ellipsize(status, stripPaint, width - 110 * d, TextUtils.TruncateAt.END).toString()
+            canvas.drawText(label, width / 2f, baseline(stripH / 2f, stripPaint), stripPaint)
+        } else drawSuggestions(canvas)
     }
 
     private fun drawStripIcons(canvas: Canvas) {
@@ -629,17 +589,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             canvas.drawCircle(iconW / 2f + 4 * d, stripH / 2f, 17 * d, fillPaint)
         }
         Icons.draw(canvas, Icons.Kind.CLIPBOARD, iconW / 2f + 4 * d, stripH / 2f, 19 * d, iconColor)
-        // AI button
-        val aiColor = when {
-            aiBusy -> theme.accent
-            aiActive -> theme.accent.withAlpha(0.8f)
-            else -> iconColor
-        }
         if (stripPressed == 3) {
             fillPaint.color = theme.keyFillPressed
             canvas.drawCircle(width - iconW / 2f - 4 * d, stripH / 2f, 17 * d, fillPaint)
         }
-        Icons.draw(canvas, Icons.Kind.SPARKLE, width - iconW / 2f - 4 * d, stripH / 2f, 20 * d, aiColor)
+        Icons.draw(canvas, Icons.Kind.GEAR, width - iconW / 2f - 4 * d, stripH / 2f, 20 * d, iconColor)
     }
 
     private fun drawSuggestions(canvas: Canvas) {
@@ -668,15 +622,13 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 Suggestion.Kind.LITERAL -> if (suggestions.any { it.autoCorrect }) "“${s.text}”" else s.text
                 else -> s.text
             }
-            val showSpark = s.kind == Suggestion.Kind.AI || s.kind == Suggestion.Kind.PHRASE
             val showClip = s.kind == Suggestion.Kind.CLIP
-            val iconSpace = if (showSpark || showClip) 18 * d else 0f
+            val iconSpace = if (showClip) 18 * d else 0f
             stripPaint.typeface = if (s.autoCorrect) medium else regular
             stripPaint.color = theme.stripText
             label = TextUtils.ellipsize(label, stripPaint, rect.width() - 16 * d - iconSpace, TextUtils.TruncateAt.END).toString()
             val tw = stripPaint.measureText(label)
             val cx = rect.centerX() + iconSpace / 2f
-            if (showSpark) Icons.draw(canvas, Icons.Kind.SPARKLE, cx - tw / 2f - 11 * d, stripH / 2f, 12 * d, theme.accent)
             if (showClip) Icons.draw(canvas, Icons.Kind.CLIPBOARD, cx - tw / 2f - 11 * d, stripH / 2f, 13 * d, theme.accent)
             canvas.drawText(label, cx, baseline(stripH / 2f, stripPaint), stripPaint)
         }
@@ -724,7 +676,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                     invalidate()
                 }
                 val p = presses.remove(e.getPointerId(idx))
-                if (p != null) release(p, commit = true)
+                if (p != null) release(p, commit = !splitMode || popupOwner === p || hit(e.getX(idx), e.getY(idx)) != null)
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -738,17 +690,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun stripHit(x: Float, y: Float): Int {
+        if (voiceStatus != null) return -2
         if (emojiQuery != null) {
             val rowH = 50 * d
             if (y < rowH) return if (x > width - 50 * d) 100 else -2
             val i = ((x - 8 * d) / (46 * d)).toInt()
             return if (i in emojiResults.indices) 200 + i else -2
-        }
-        if (statusText != null) return -2
-        chips?.let { list ->
-            val pad = 6 * d
-            val i = ((x - pad) / ((width - pad * 2) / list.size)).toInt()
-            return if (i in list.indices) 300 + i else -2
         }
         if (look.stripIcons && x < iconW + 4 * d) return -1
         if (look.stripIcons && x > width - iconW - 4 * d) return 3
@@ -760,10 +707,9 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private fun onStripTap(slot: Int) {
         when (slot) {
             100 -> listener.onEmojiSearchClose()
-            in 300..399 -> listener.onChip(slot - 300)
             in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
             -1 -> listener.onClipboardButton()
-            3 -> listener.onAiButton()
+            3 -> listener.onSettingsButton()
             in 0..2 -> {
                 val index = slotOrder()[slot]
                 if (index < suggestions.size) listener.onSuggestion(index)
@@ -772,6 +718,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun hit(x: Float, y: Float): KeyBox? {
+        if (splitMode && abs(x - width / 2f) < KeyGeometry.centerGap(width.toFloat(), d) / 2) return null
         // Pick the row first (gaps belong to the nearest row), then the nearest key in that row.
         var row = -1
         for ((i, rb) in rowBounds.withIndex()) if (y >= rb.first && y < rb.second) { row = i; break }
@@ -872,6 +819,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         // Sliding onto a neighboring letter re-targets the press (iOS behavior).
         if (k.type == KeyType.CHAR && !p.longPressed) {
             val nb = hit(x, y)
+            if (nb == null && splitMode) {
+                presses.entries.removeAll { it.value === p }
+                keyHandler.removeCallbacksAndMessages(null)
+                invalidate()
+                return
+            }
             if (nb != null && nb !== p.box && nb.key.type == KeyType.CHAR) {
                 val id = presses.entries.firstOrNull { it.value === p }?.key ?: return
                 presses[id] = Press(nb, x, y)

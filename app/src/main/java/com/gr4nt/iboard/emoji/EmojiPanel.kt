@@ -45,7 +45,7 @@ class EmojiPanel(
 
     private val d = resources.displayMetrics.density
     private val history = EmojiHistory(context)
-    private val columns = 8
+    private var columns = 8
     private val grid = RecyclerView(context)
     private val categoryBar = CategoryBar(context)
     private val adapter = Adapter()
@@ -60,6 +60,12 @@ class EmojiPanel(
     /** A grid entry: a section title (spans the row) or one emoji. */
     private data class Item(val emoji: Emoji?, val category: Int, val header: String? = null)
 
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val count = (w / (48 * d)).toInt().coerceIn(6, 20)
+        if (count != columns) { columns = count; layoutManager.spanCount = count; adapter.notifyDataSetChanged() }
+    }
     init {
         val catH = (46 * d).toInt()
         val searchH = (46 * d).toInt()

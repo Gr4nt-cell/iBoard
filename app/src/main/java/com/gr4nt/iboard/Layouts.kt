@@ -1,8 +1,8 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, SPACE, RETURN, CLIPBOARD, MIC, SPACER, AI, SETTINGS }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_NUMBER_PAD, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, MIC, SPACE, RETURN, CLIPBOARD, SPACER, SETTINGS }
 
-enum class Page { LETTERS, SYMBOLS, MORE_SYMBOLS }
+enum class Page { LETTERS, NUMBER_PAD, SYMBOLS, MORE_SYMBOLS }
 
 enum class FieldKind { TEXT, EMAIL, URL }
 
@@ -45,13 +45,23 @@ object Layouts {
         field: FieldKind,
         showGlobe: Boolean,
         utilityRow: Boolean = true,
-        voice: Boolean = true,
     ): KeyboardLayout {
         val rows = mutableListOf<KeyRow>()
         val units = if (lang == "de" || lang == "ar") 11f else 10f
-        if (numberRow) rows += KeyRow(numberRowKeys(lang), isNumberRow = true)
+        if (numberRow && page != Page.NUMBER_PAD) rows += KeyRow(numberRowKeys(lang), isNumberRow = true)
 
         when (page) {
+            Page.NUMBER_PAD -> {
+                fun digit(c: Char) = Key(KeyType.CHAR, c.toString(), 1.2f,
+                    if (lang == "ar") listOf("٠١٢٣٤٥٦٧٨٩"[c.digitToInt()].toString()) else emptyList())
+                rows += KeyRow(listOf(Key(KeyType.CHAR, "+", 0.9f)) + "123".map(::digit) + Key(KeyType.BACKSPACE, width = 1.5f))
+                rows += KeyRow(listOf(Key(KeyType.CHAR, "-", 0.9f)) + "456".map(::digit) + Key(KeyType.CHAR, "/", 1.5f))
+                rows += KeyRow(listOf(Key(KeyType.TO_SYMBOLS, "#+=", 0.9f)) + "789".map(::digit) + Key(KeyType.CHAR, "*", 1.5f))
+                rows += KeyRow(listOf(Key(KeyType.TO_LETTERS, "ABC", 0.9f), Key(KeyType.CHAR, ".", 1.2f), digit('0'), Key(KeyType.CHAR, ",", 1.2f), Key(KeyType.RETURN, width = 1.5f)))
+                if (utilityRow) rows += KeyRow(listOf(Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX), Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX)), isUtility = true)
+                if (!utilityRow) rows += KeyRow(listOf(Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX)), isUtility = true)
+                return KeyboardLayout(rows, 6f, rtl = lang == "ar")
+            }
             Page.LETTERS -> {
                 val lr = letterRows[lang] ?: letterRows.getValue("en")
                 // Arabic rows are written right-to-left, so flip them for left-to-right placement.
@@ -84,11 +94,12 @@ object Layouts {
 
         // Bottom row: 123 · , · space · . · return  (emoji moves to the glass capsule below)
         val bottom = mutableListOf<Key>()
-        bottom += if (page == Page.LETTERS) Key(KeyType.TO_SYMBOLS, "123", 1.25f)
+        bottom += if (page == Page.LETTERS) Key(KeyType.TO_NUMBER_PAD, "123", 1.25f)
         else Key(KeyType.TO_LETTERS, if (lang == "ar") "أب" else "ABC", 1.25f)
         if (!utilityRow) bottom += Key(KeyType.EMOJI, width = 1.1f)
         // The globe only appears when there's more than one language to switch between.
-        if (showGlobe) bottom += Key(KeyType.GLOBE, width = 1.1f)
+        if (showGlobe || !utilityRow) bottom += Key(KeyType.GLOBE, width = 1.1f)
+        if (!utilityRow) bottom += Key(KeyType.MIC, width = 1.1f)
         val comma = if (lang == "ar") "،" else ","
         val left = when (field) {
             FieldKind.EMAIL -> Key(KeyType.CHAR, "@", 1f)
@@ -109,9 +120,8 @@ object Layouts {
         if (utilityRow) {
             val util = mutableListOf(
                 Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
-                Key(KeyType.AI, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
+                Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
             )
-            if (voice) util += Key(KeyType.MIC, width = Key.FLEX)
             rows += KeyRow(util, isUtility = true)
         }
 

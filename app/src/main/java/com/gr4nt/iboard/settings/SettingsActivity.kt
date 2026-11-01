@@ -36,7 +36,6 @@ import com.gr4nt.iboard.BuildConfig
 import com.gr4nt.iboard.IBoardService
 import com.gr4nt.iboard.Icons
 import com.gr4nt.iboard.Prefs
-import com.gr4nt.iboard.predict.AiPredictor
 import kotlinx.coroutines.launch
 
 /** iBoard settings, laid out like the iOS Settings app: grouped cards, colored icons, pushed sub-pages. */
@@ -70,12 +69,11 @@ class SettingsActivity : AppCompatActivity() {
         if (android.os.Build.VERSION.SDK_INT < 35) WindowCompat.setDecorFitsSystemWindows(window, false)
         prefs = Prefs(this)
         sp = prefs.sp
-        val night = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-        p = IosPalette(night)
+        val night = com.gr4nt.iboard.KeyboardTheme.isNight(this, prefs)
+        p = IosPalette(com.gr4nt.iboard.KeyboardTheme.isNight(this, prefs))
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !night
 
-        container = FrameLayout(this).apply { setBackgroundColor(p.background) }
+        container = FrameLayout(this).apply { background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this@SettingsActivity, prefs).gradient) }
         setContentView(container)
         ViewCompat.setOnApplyWindowInsetsListener(container) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
@@ -149,13 +147,13 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun scroll(content: View) = ScrollView(this).apply {
         isFillViewport = true
-        setBackgroundColor(p.background)
+        background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this@SettingsActivity, prefs).gradient)
         addView(content)
     }
 
     /** A sub-page with a "‹ Back" button and a centered title, like a pushed iOS screen. */
     private fun subPage(title: String, build: IosList.() -> Unit): View {
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(p.background) }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this@SettingsActivity, prefs).gradient) }
         val bar = FrameLayout(this)
         val back = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -177,6 +175,7 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(p.label)
             gravity = Gravity.CENTER
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        back.bringToFront()
         col.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (46 * d).toInt()))
         val list = IosList(this, p)
         list.build()
@@ -192,6 +191,7 @@ class SettingsActivity : AppCompatActivity() {
                 entries.forEachIndexed { i, label ->
                     checkRow(label, values[i] == current) {
                         sp.edit().putString(key, values[i]).apply()
+                        this@SettingsActivity.updateAppearance()
                         val fresh = build()
                         container.removeView(page); container.addView(fresh); stack[stack.lastIndex] = fresh; page = fresh
                     }
@@ -209,7 +209,13 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun mainPage(): View {
         val l = IosList(this, p)
-        l.largeTitle("iBoard")
+        l.largeTitle("Settings")
+        l.root.addView(TextView(this).apply {
+            text = "Your keyboard, beautifully personal."
+            setTextColor(p.secondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setPadding(dp(22f), 0, dp(22f), dp(4f))
+        })
         hero(l)
 
         l.section(footer = "Type here to try iBoard. Settings below apply to the keyboard instantly.") {
@@ -241,27 +247,45 @@ class SettingsActivity : AppCompatActivity() {
             }
             sliderRow(Icons.Kind.DROP, teal, "Background Opacity", 0, 100, 5, prefs.bgOpacity, "%") { putInt(Prefs.BG_OPACITY, it) }
             navRow(Icons.Kind.KEYCAP, blue, "Key Style", label(styleE, styleV, prefs.keyStyle)) {
-                choicePage("Key Style", styleE, styleV, Prefs.KEY_STYLE, "solid")
+                choicePage("Key Style", styleE, styleV, Prefs.KEY_STYLE, "glass")
             }
             navRow(Icons.Kind.RETURN, orange, "Return Key Color", label(accE, accV, prefs.accentColor)) {
                 choicePage("Return Key Color", accE, accV, Prefs.ACCENT_COLOR, "blue")
             }
         }
 
+        l.section("Offline intelligence", "Both modules are built in. No internet connection, account or model download is needed.") {
+            switchRow(Icons.Kind.MIC, blue, "Offline Dictation", sp.getBoolean("voice_typing", true),
+                subtitle = "Whisper Base · 6 keyboard languages") { putBool("voice_typing", it) }
+            navRow(Icons.Kind.MIC, teal, "Microphone Access",
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) "Allowed" else "Off",
+                subtitle = "Tap the mic beside the globe to start") {
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
+                else startActivity(Intent(this@SettingsActivity, com.gr4nt.iboard.voice.MicrophonePermissionActivity::class.java))
+            }
+            navRow(Icons.Kind.BOOK, indigo, "Word Prediction", "On-device",
+                subtitle = "Trained context model + personal vocabulary") {
+                AlertDialog.Builder(this@SettingsActivity).setTitle("On-device word prediction")
+                    .setMessage("Built-in models use the last two words to rank completions and predict the next word. Keyboard-aware corrections and your optional learned vocabulary work together in all six languages. Personal learning stays on this phone; reset it below.\n\nContext models trained on Tatoeba contributor sentences (CC BY 2.0 FR). https://tatoeba.org/en/downloads")
+                    .setPositiveButton("Done", null).show()
+            }
+        }
+
         val hasCustom = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this).exists()
-        val emoE = mutableListOf("3D (Built-in)", "Phone's Emoji Font"); val emoV = mutableListOf("3d", "system")
+        val emoE = mutableListOf("iOS-style (Built-in)"); val emoV = mutableListOf("bundled")
         if (hasCustom) { emoE += "Imported Font"; emoV += "custom" }
-        l.section("Emoji", "Import an emoji font (.ttf) that's on your phone and the keyboard will draw emoji with it. The font stays on this phone.") {
+        l.section("Emoji", "An iOS-style emoji font is built in. No extra emoji download is needed. You can import a different font entirely offline.") {
             navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {
-                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "3d",
-                    "3D uses the bundled Fluent emoji art. Phone's Emoji Font uses your system emoji. Imported Font uses the .ttf you picked.")
+                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "bundled",
+                    "The built-in font is included in the app. Imported Font uses the .ttf you picked.")
             }
             actionRow(if (hasCustom) "Replace Emoji Font…" else "Import Emoji Font…", p.blue, Icons.Kind.TEXT_AA, orange) {
                 pickFont.launch(arrayOf("*/*"))
             }
             if (hasCustom) actionRow("Remove Imported Font", p.red) {
                 com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this@SettingsActivity).delete()
-                if (prefs.emojiStyle == "custom") sp.edit().putString(Prefs.EMOJI_STYLE, "3d").apply()
+                if (prefs.emojiStyle == "custom") sp.edit().putString(Prefs.EMOJI_STYLE, "bundled").apply()
                 toast("Imported font removed")
                 refreshMain()
             }
@@ -277,14 +301,9 @@ class SettingsActivity : AppCompatActivity() {
             switchRow(Icons.Kind.KEYBOARD, gray, "Label on Space Bar", prefs.spaceLabel) { putBool(Prefs.SPACE_LABEL, it) }
         }
 
-        l.section("Icon Capsule", "The glass bar under the keys holds settings, emoji, ✨ AI (predictions, Translate, Fix Grammar), clipboard and the dictation mic. Long-press the gear to pick another keyboard.") {
+        l.section("Icon Capsule", "Settings, emoji, languages, microphone and clipboard. All typing and predictions work offline.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
-            switchRow(Icons.Kind.MIC, red, "Dictation", prefs.voiceTyping) { putBool(Prefs.VOICE_TYPING, it) }
-            val store = com.gr4nt.iboard.voice.ModelStore(this@SettingsActivity)
-            val ready = store.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) != null
-            navRow(Icons.Kind.WAVE, indigo, "Offline Dictation", if (ready) "Ready" else "Download",
-                subtitle = "Rambler-style voice typing, no internet") { offlinePage() }
-            switchRow(Icons.Kind.SPARKLE, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }
+            switchRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }
         }
 
         l.section("Typing") {
@@ -309,56 +328,13 @@ class SettingsActivity : AppCompatActivity() {
             navRow(Icons.Kind.GLOBE, blue, "Keyboards", langs) { languagesPage() }
         }
 
-        l.section("AI Predictions", "Sends the text before the cursor to the provider you choose. Never used in password or incognito fields.") {
-            switchRow(Icons.Kind.SPARKLE, purple, "AI Word Prediction", prefs.aiEnabled && prefs.aiConsent,
-                subtitle = "Context-aware words, fixes & phrases") { on ->
-                if (on && !prefs.aiConsent) {
-                    // Show the disclosure; the switch only turns on if the user agrees.
-                    startActivity(ConsentActivity.intent(this@SettingsActivity, ConsentActivity.MODE_AI))
-                } else putBool(Prefs.AI_ENABLED, on)
-            }
-            val provE = listOf("Anthropic Claude", "OpenAI-Compatible"); val provV = listOf("anthropic", "openai")
-            navRow(null, 0, "Provider", label(provE, provV, prefs.aiProvider)) {
-                choicePage("Provider", provE, provV, Prefs.AI_PROVIDER, "anthropic",
-                    "OpenAI-compatible covers OpenAI, Gemini, Groq, OpenRouter and similar services.")
-            }
-            val key = prefs.aiKey
-            navRow(null, 0, "API Key", if (key.isEmpty()) "Not Set" else "••••" + key.takeLast(4)) {
-                editText("API Key", Prefs.AI_KEY, password = true)
-            }
-            navRow(null, 0, "Model", (sp.getString(Prefs.AI_MODEL, "") ?: "").ifEmpty {
-                if (prefs.aiProvider == "anthropic") Prefs.DEFAULT_CLAUDE_MODEL else "Required"
-            }) { editText("Model", Prefs.AI_MODEL) }
-            if (prefs.aiProvider != "anthropic") {
-                navRow(null, 0, "Base URL", prefs.aiBaseUrl) { editText("Base URL", Prefs.AI_BASE_URL, url = true) }
-            }
-            lateinit var testView: TextView
-            testView = actionRow("Test Connection", p.blue) {
-                testView.text = "Testing…"
-                lifecycleScope.launch {
-                    val r = AiPredictor(Prefs(this@SettingsActivity)).test()
-                    testView.text = "Test Connection"
-                    AlertDialog.Builder(this@SettingsActivity).setTitle("AI Connection").setMessage(r)
-                        .setPositiveButton("OK", null).show()
-                }
-            }
-        }
-
         l.section("Clipboard") {
             switchRow(Icons.Kind.CLIPBOARD, yellow, "Clipboard History", prefs.clipboardHistory,
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        if (prefs.aiConsent) l.section(footer = "Stops all AI features and sends nothing further to your AI provider until you agree again.") {
-            actionRow("Withdraw AI Consent", p.red) {
-                sp.edit().putBoolean(Prefs.AI_CONSENT, false).putBoolean(Prefs.AI_ENABLED, false).apply()
-                toast("AI features turned off")
-                refreshMain()
-            }
-        }
-
-        l.section("Privacy", "Everything you type stays on this phone unless you turn on AI features.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { ConsentActivity.openPrivacyPolicy(this@SettingsActivity) }
+        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. No internet permission. The microphone is used only when you start dictation.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Offline privacy").setMessage("iBoard has no internet permission. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
@@ -374,7 +350,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Emoji art: Microsoft Fluent Emoji (MIT)"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: bundled font"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER
@@ -419,85 +395,6 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    /** Download, pick and delete the offline speech and Rambler models. */
-    private fun offlinePage() {
-        val store = com.gr4nt.iboard.voice.ModelStore(this)
-        lateinit var page: View
-        val poll = android.os.Handler(mainLooper)
-        fun rebuild(): Unit = run {
-            val fresh = buildOffline(store) { rebuild() }
-            val i = stack.indexOf(page)
-            if (i < 0) return@run
-            container.removeView(page); container.addView(fresh); stack[i] = fresh; page = fresh
-        }
-        page = buildOffline(store) { rebuild() }
-        push(page)
-        val tick = object : Runnable {
-            override fun run() {
-                if (!stack.contains(page)) return
-                val busy = com.gr4nt.iboard.voice.ModelCatalog.all.any { store.state(it) is com.gr4nt.iboard.voice.ModelStore.State.Downloading }
-                if (busy) rebuild()
-                poll.postDelayed(this, if (busy) 1000 else 3000)
-            }
-        }
-        poll.postDelayed(tick, 1000)
-    }
-
-    private fun buildOffline(store: com.gr4nt.iboard.voice.ModelStore, rebuild: () -> Unit): View = subPage("Offline Dictation") {
-        section(footer = "Speak naturally. Pauses, “um”s, repeats and corrections like “Tuesday, no wait, Wednesday” are cleaned up on this phone — no internet needed. Models are downloaded once from Hugging Face.") {
-            switchRow(Icons.Kind.MIC, red, "Use Offline Dictation", prefs.offlineDictation,
-                subtitle = "🎤 uses the downloaded speech model") { putBool(Prefs.OFFLINE_DICTATION, it) }
-            switchRow(Icons.Kind.SPARKLE, purple, "Rambler Clean-Up", prefs.ramblerRewrite,
-                subtitle = "Rewrite rambles into polished text") { putBool(Prefs.RAMBLER_REWRITE, it) }
-            switchRow(Icons.Kind.GLOBE, blue, "Download on Wi-Fi Only", prefs.modelsWifiOnly) { putBool(Prefs.MODELS_WIFI_ONLY, it) }
-        }
-        section("Speech Recognition", "Turns your voice into punctuated text. Fast suits most phones; Accurate copes better with accents and noise.") {
-            com.gr4nt.iboard.voice.ModelCatalog.of(com.gr4nt.iboard.voice.ModelKind.SPEECH).forEach { modelRow(this, store, it, rebuild) }
-        }
-        section("Rambler Writing Model", "Turns what you said into what you meant. Optional: without it, iBoard still removes fillers and applies your corrections.") {
-            com.gr4nt.iboard.voice.ModelCatalog.of(com.gr4nt.iboard.voice.ModelKind.REWRITE).forEach { modelRow(this, store, it, rebuild) }
-        }
-    }
-
-    private fun modelRow(l: IosList, store: com.gr4nt.iboard.voice.ModelStore, m: com.gr4nt.iboard.voice.OfflineModel, rebuild: () -> Unit) {
-        val speech = m.kind == com.gr4nt.iboard.voice.ModelKind.SPEECH
-        val selectedId = if (speech) prefs.speechModel else prefs.rewriteModel
-        val activeId = store.active(m.kind, selectedId)?.id
-        val state = store.state(m)
-        val value = when (state) {
-            is com.gr4nt.iboard.voice.ModelStore.State.Missing -> "${sizeLabel(m.sizeMb)}"
-            is com.gr4nt.iboard.voice.ModelStore.State.Downloading -> "${state.percent}%"
-            is com.gr4nt.iboard.voice.ModelStore.State.Failed -> "Retry"
-            is com.gr4nt.iboard.voice.ModelStore.State.Installed -> if (activeId == m.id) "In Use ✓" else "Installed"
-        }
-        val icon = if (speech) Icons.Kind.WAVE else Icons.Kind.SPARKLE
-        l.navRow(icon, if (speech) teal else purple, m.title, value, subtitle = m.subtitle) {
-            when (state) {
-                is com.gr4nt.iboard.voice.ModelStore.State.Missing, is com.gr4nt.iboard.voice.ModelStore.State.Failed -> {
-                    val wifi = if (prefs.modelsWifiOnly) " It will download when you're on Wi-Fi." else ""
-                    confirm("Download ${m.title}?", "${m.subtitle}. ${sizeLabel(m.sizeMb)}.$wifi", "Download") {
-                        store.download(m, prefs.modelsWifiOnly)
-                        sp.edit().putString(if (speech) Prefs.SPEECH_MODEL else Prefs.REWRITE_MODEL, m.id).apply()
-                        toast("Downloading — you can leave this screen")
-                        rebuild()
-                    }
-                }
-                is com.gr4nt.iboard.voice.ModelStore.State.Downloading ->
-                    confirm("Cancel download?", "${m.title} is ${state.percent}% downloaded.", "Cancel Download") { store.cancel(m); rebuild() }
-                is com.gr4nt.iboard.voice.ModelStore.State.Installed -> {
-                    AlertDialog.Builder(this).setTitle(m.title)
-                        .setItems(arrayOf("Use This Model", "Delete (${sizeLabel(m.sizeMb)})")) { _, which ->
-                            if (which == 0) sp.edit().putString(if (speech) Prefs.SPEECH_MODEL else Prefs.REWRITE_MODEL, m.id).apply()
-                            else store.delete(m)
-                            rebuild()
-                        }.show()
-                }
-            }
-        }
-    }
-
-    private fun sizeLabel(mb: Int) = if (mb >= 1000) String.format(java.util.Locale.US, "%.1f GB", mb / 1000f) else "$mb MB"
-
     private fun languagesPage() {
         lateinit var page: View
         fun build(): View = subPage("Keyboards") {
@@ -519,6 +416,13 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------ helpers
+
+    private fun updateAppearance() {
+        p = IosPalette(com.gr4nt.iboard.KeyboardTheme.isNight(this, prefs))
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !p.dark
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !p.dark
+        if (::container.isInitialized) container.background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this, prefs).gradient)
+    }
 
     private fun putBool(key: String, v: Boolean) = sp.edit().putBoolean(key, v).apply()
     private fun putInt(key: String, v: Int) = sp.edit().putInt(key, v).apply()
@@ -565,13 +469,11 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::prefs.isInitialized) updateAppearance()
         // Pick up changes made elsewhere (consent screen, keyboard ✨ button).
         if (stack.size == 1 && ::container.isInitialized) refreshMain()
         updateStatus()
-        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) {
-            intent.removeExtra(EXTRA_REQUEST_MIC)
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7)
-        }
+
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -582,14 +484,6 @@ class SettingsActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) updateStatus()
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 7) toast(
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
-                "Microphone allowed — tap 🎤 on the keyboard to dictate" else "Dictation needs the microphone"
-        )
     }
 
     private fun updateStatus() {
@@ -620,7 +514,4 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    companion object {
-        const val EXTRA_REQUEST_MIC = "request_mic"
-    }
 }

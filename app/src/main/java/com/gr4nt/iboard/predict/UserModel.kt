@@ -7,6 +7,7 @@ import java.io.File
 class UserModel(private val context: Context, val lang: String) {
     private val unigrams = HashMap<String, Int>()
     private val bigrams = HashMap<String, HashMap<String, Int>>()
+    private val trigrams = HashMap<String, HashMap<String, Int>>()
     private var dirty = false
 
     private val file: File get() = File(context.filesDir, "user_$lang.tsv")
@@ -16,6 +17,7 @@ class UserModel(private val context: Context, val lang: String) {
             if (file.exists()) file.forEachLine { line ->
                 val p = line.split('\t')
                 when {
+                    p.size == 5 && p[0] == "t" -> trigrams.getOrPut(p[1] + "|" + p[2]) { HashMap() }[p[3]] = p[4].toIntOrNull() ?: 1
                     p.size == 3 && p[0] == "u" -> unigrams[p[1]] = p[2].toIntOrNull() ?: 1
                     p.size == 4 && p[0] == "b" ->
                         bigrams.getOrPut(p[1]) { HashMap() }[p[2]] = p[3].toIntOrNull() ?: 1
@@ -30,12 +32,16 @@ class UserModel(private val context: Context, val lang: String) {
     /** A word the user has typed at least twice is treated as valid (never auto-corrected). */
     fun knows(word: String): Boolean = count(word) >= 2
 
-    fun learn(word: String, previous: String?) {
+    fun learn(word: String, previous: String?, previousPrevious: String? = null) {
         if (word.isBlank() || word.length > 40) return
         val w = keyOf(word)
         unigrams[w] = (unigrams[w] ?: 0) + 1
         if (!previous.isNullOrBlank()) {
             val m = bigrams.getOrPut(keyOf(previous)) { HashMap() }
+            m[w] = (m[w] ?: 0) + 1
+        }
+        if (!previous.isNullOrBlank() && !previousPrevious.isNullOrBlank()) {
+            val m = trigrams.getOrPut(keyOf(previousPrevious) + "|" + keyOf(previous)) { HashMap() }
             m[w] = (m[w] ?: 0) + 1
         }
         dirty = true
@@ -50,14 +56,24 @@ class UserModel(private val context: Context, val lang: String) {
     }
 
     fun forget(word: String) {
-        unigrams.remove(keyOf(word))
+        val key = keyOf(word)
+        unigrams.remove(key)
+        bigrams.remove(key);bigrams.values.forEach { it.remove(key) }
+        trigrams.entries.removeAll { key in it.key.split('|') }
+        trigrams.values.forEach { it.remove(key) }
         dirty = true
     }
 
-    fun nextWords(previous: String?, limit: Int): List<Pair<String, Int>> {
+    fun trigramCount(previousPrevious: String?, previous: String?, word: String): Int =
+        if (previousPrevious.isNullOrBlank() || previous.isNullOrBlank()) 0
+        else trigrams[keyOf(previousPrevious) + "|" + keyOf(previous)]?.get(keyOf(word)) ?: 0
+
+    fun nextWords(previous: String?, limit: Int, previousPrevious: String? = null): List<Pair<String, Int>> {
         if (previous.isNullOrBlank()) return emptyList()
-        val m = bigrams[keyOf(previous)] ?: return emptyList()
-        return m.entries.sortedByDescending { it.value }.take(limit).map { it.key to it.value }
+        val scores = HashMap<String, Int>()
+        bigrams[keyOf(previous)]?.forEach { (w, c) -> scores[w] = c }
+        if (!previousPrevious.isNullOrBlank()) trigrams[keyOf(previousPrevious) + "|" + keyOf(previous)]?.forEach { (w, c) -> scores[w] = (scores[w] ?: 0) + c * 4 }
+        return scores.entries.sortedByDescending { it.value }.take(limit).map { it.key to it.value }
     }
 
     fun bigramCount(previous: String?, word: String): Int {
@@ -78,6 +94,10 @@ class UserModel(private val context: Context, val lang: String) {
             bigrams.forEach { (p, m) ->
                 m.forEach { (w, c) -> sb.append("b\t").append(p).append('\t').append(w).append('\t').append(c).append('\n') }
             }
+            trigrams.forEach { (pair, words) ->
+                val parts = pair.split('|')
+                words.forEach { (w, c) -> sb.append("t\t").append(parts[0]).append('\t').append(parts[1]).append('\t').append(w).append('\t').append(c).append('\n') }
+            }
             val tmp = File(context.filesDir, "user_$lang.tmp")
             tmp.writeText(sb.toString())
             tmp.renameTo(file)
@@ -87,12 +107,14 @@ class UserModel(private val context: Context, val lang: String) {
     }
 
     fun clear() {
-        unigrams.clear(); bigrams.clear(); file.delete(); dirty = false
+        unigrams.clear(); bigrams.clear(); trigrams.clear(); file.delete(); dirty = false
     }
 
     private fun prune() {
         unigrams.entries.removeAll { it.value <= 1 }
         bigrams.values.forEach { m -> m.entries.removeAll { it.value <= 1 } }
+        trigrams.values.forEach { m -> m.entries.removeAll { it.value <= 1 } }
+        trigrams.entries.removeAll { it.value.isEmpty() }
         bigrams.entries.removeAll { it.value.isEmpty() }
     }
 

@@ -21,12 +21,12 @@ import com.gr4nt.iboard.Icons
 
 /** Colors of iOS's grouped Settings lists, in light and dark. */
 class IosPalette(val dark: Boolean) {
-    val background = if (dark) 0xFF000000.toInt() else 0xFFF2F2F7.toInt()
-    val card = if (dark) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
+    val background = if (dark) 0xFF151B2B.toInt() else 0xFFF2F0FA.toInt()
+    val card = if (dark) 0xBD29344B.toInt() else 0xBFFFFFFF.toInt()
     val pressed = if (dark) 0xFF2C2C2E.toInt() else 0xFFE5E5EA.toInt()
-    val separator = if (dark) 0xFF38383A.toInt() else 0xFFC6C6C8.toInt()
+    val separator = if (dark) 0x26DBE7FF else 0x224A4C72
     val label = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
-    val secondary = if (dark) 0xFF8E8E93.toInt() else 0xFF6D6D72.toInt()
+    val secondary = if (dark) 0xFFC2CBE0.toInt() else 0xFF555B70.toInt()
     val tertiary = if (dark) 0xFF48484A.toInt() else 0xFFC4C4C6.toInt()
     val blue = if (dark) 0xFF0A84FF.toInt() else 0xFF007AFF.toInt()
     val green = if (dark) 0xFF30D158.toInt() else 0xFF34C759.toInt()
@@ -39,7 +39,8 @@ class IosList(private val context: Context, val p: IosPalette) {
     private val d = context.resources.displayMetrics.density
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(0, 0, 0, (40 * d).toInt())
+        val side = maxOf(0, (context.resources.configuration.screenWidthDp - 720) / 2)
+        setPadding((side * d).toInt(), 0, (side * d).toInt(), (40 * d).toInt())
     }
     private var card: LinearLayout? = null
     private var rowsInCard = 0
@@ -68,8 +69,9 @@ class IosList(private val context: Context, val p: IosPalette) {
         } else root.addView(View(context), LinearLayout.LayoutParams(1, dp(22f)))
         val c = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply { setColor(p.card); cornerRadius = 14 * d }
+            background = GradientDrawable().apply { setColor(p.card); cornerRadius = 26 * d; setStroke(maxOf(1, d.toInt()), if (p.dark) 0x3DDBE7FF else 0xE6FFFFFF.toInt()) }
             clipToOutline = true
+            elevation = 3 * d
         }
         root.addView(c, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(dp(16f), 0, dp(16f), 0)
@@ -108,16 +110,16 @@ class IosList(private val context: Context, val p: IosPalette) {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(46f)
-            setPadding(dp(16f), dp(6f), dp(14f), dp(6f))
+            minimumHeight = dp(60f)
+            setPadding(dp(16f), dp(12f), dp(16f), dp(12f))
         }
         if (icon != null) {
-            row.addView(IconTile(context, icon, tint), LinearLayout.LayoutParams(dp(29f), dp(29f)).apply { marginEnd = dp(14f) })
+            row.addView(IconTile(context, icon, tint), LinearLayout.LayoutParams(dp(34f), dp(34f)).apply { marginEnd = dp(14f) })
         }
         val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         texts.addView(TextView(context).apply {
             text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTextColor(titleColor)
         })
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -135,6 +137,7 @@ class IosList(private val context: Context, val p: IosPalette) {
         val (row, texts) = baseRow(icon, tint, title)
         subtitle?.let { addSubtitle(texts, it) }
         val sw = IosSwitch(context, p).apply { isOn = checked; this.onChange = onChange }
+        sw.contentDescription = title
         row.addView(sw, LinearLayout.LayoutParams(dp(51f), dp(31f)).apply { marginStart = dp(10f) })
         row.setOnClickListener { sw.toggle() }
         custom(row, inset(icon))
@@ -147,7 +150,7 @@ class IosList(private val context: Context, val p: IosPalette) {
         subtitle?.let { addSubtitle(texts, it) }
         val v = TextView(context).apply {
             text = value ?: ""
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTextColor(p.secondary)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -188,7 +191,7 @@ class IosList(private val context: Context, val p: IosPalette) {
         val (row, _) = baseRow(icon, tint, title)
         val valueView = TextView(context).apply {
             text = "$value$suffix"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTextColor(p.secondary)
         }
         row.addView(valueView)
@@ -233,10 +236,10 @@ class IosList(private val context: Context, val p: IosPalette) {
 class IconTile(context: Context, private val kind: Icons.Kind, private val color: Int) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onDraw(canvas: Canvas) {
-        paint.color = color
+        paint.color = (color and 0x00FFFFFF) or 0x22000000
         val r = width * 0.23f
         canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, paint)
-        Icons.draw(canvas, kind, width / 2f, height / 2f, width * 0.62f, 0xFFFFFFFF.toInt())
+        Icons.draw(canvas, kind, width / 2f, height / 2f, width * 0.62f, color)
     }
 }
 
@@ -260,6 +263,7 @@ class IosSwitch(context: Context, private val p: IosPalette) : View(context) {
 
     init {
         isClickable = true
+        isFocusable = true
         setOnClickListener { toggle() }
     }
 
@@ -282,10 +286,17 @@ class IosSwitch(context: Context, private val p: IosPalette) : View(context) {
         pos = keep
     }
 
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.className = "android.widget.Switch"
+        info.isCheckable = true
+        info.isChecked = isOn
+    }
+
     override fun onDraw(canvas: Canvas) {
         val h = height.toFloat()
         val w = width.toFloat()
-        track.color = blend(p.switchOff, p.green, pos)
+        track.color = blend(p.switchOff, p.blue, pos)
         canvas.drawRoundRect(0f, 0f, w, h, h / 2f, h / 2f, track)
         val r = h / 2f - 2 * resources.displayMetrics.density
         val cx = h / 2f + (w - h) * pos

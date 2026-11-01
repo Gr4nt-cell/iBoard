@@ -1,0 +1,13 @@
+{
+  "lang": "en",
+  "url": "https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2",
+  "sentences": 150000,
+  "heldout_sentences": 2000,
+  "heldout_words": 12324,
+  "top3_accuracy": 0.3539435248296008,
+  "context_coverage": 0.9693281402142162,
+  "bigrams": 33556,
+  "trigrams": 76007,
+  "corpus_prefix_sha256": "2474e8f4833a72fcd051cbd1a058ddb55d081a503b334ef356235910df7d9bc8",
+  "sha256": "51a19086a7669a29140100af639e044676ce364ca574c88cd539c4c6ab786d20"
+}

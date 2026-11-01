@@ -20,8 +20,6 @@ import androidx.core.view.WindowInsetsCompat
 import com.gr4nt.iboard.clipboard.ClipboardPanel
 import com.gr4nt.iboard.clipboard.ClipboardStore
 import com.gr4nt.iboard.emoji.EmojiPanel
-import com.gr4nt.iboard.predict.AiPredictor
-import com.gr4nt.iboard.predict.Dictation
 import com.gr4nt.iboard.predict.Dictionary
 import com.gr4nt.iboard.predict.Suggester
 import com.gr4nt.iboard.predict.Suggestion
@@ -40,10 +38,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private lateinit var prefs: Prefs
     private lateinit var clipStore: ClipboardStore
-    private lateinit var ai: AiPredictor
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var root: FrameLayout? = null
+    private var liveBlur: LiveKeyboardBlur? = null
     private var keyboard: KeyboardView? = null
     private var emojiPanel: EmojiPanel? = null
     private var clipPanel: ClipboardPanel? = null
@@ -66,8 +64,126 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var lastSpaceAt = 0L
     private var spaceAutoInserted = false
     private var pastedClip: String? = null
-    private var aiJob: Job? = null
-    private var lastContext = ""
+
+    // Session IDs isolate the active editor. Late native results never reach another field.
+    @Volatile private var voiceSession = 0L
+    private var recorder: com.gr4nt.iboard.voice.PauseChunker? = null
+    private var voiceJob: Job? = null
+    @Volatile private var voiceModel: com.gr4nt.iboard.voice.WhisperLib.Model? = null
+    private var voiceQueue: kotlinx.coroutines.channels.Channel<FloatArray>? = null
+
+    private fun toast(message: String) { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+
+    private fun voiceMessage(message: String?) {
+        if (message != null && keyboard?.voiceStatus != message) keyboard?.announceForAccessibility(message)
+        keyboard?.voiceStatus = message
+        keyboard?.voiceActive = message != null
+    }
+
+    private fun cancelVoice() {
+        voiceSession++
+        voiceModel?.cancel()
+        voiceModel = null
+        recorder?.stop()
+        recorder = null
+        voiceQueue?.cancel()
+        voiceQueue = null
+        voiceJob?.cancel()
+        voiceJob = null
+        voiceMessage(null)
+    }
+
+    private fun toggleVoice() {
+        if (voiceJob?.isActive == true) {
+            if (recorder != null) {
+                recorder?.stop()
+                recorder = null
+                voiceMessage("Finishing offline… Tap mic to cancel")
+            } else cancelVoice()
+            return
+        }
+        if (password || emojiQuery != null) { toast("Dictation is unavailable in this field"); return }
+        if (!prefs.sp.getBoolean("voice_typing", true)) { toast("Enable offline dictation in Settings"); return }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startActivity(Intent(this, com.gr4nt.iboard.voice.MicrophonePermissionActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+        val session = ++voiceSession
+        val connection = currentInputConnection ?: return
+        val language = lang
+        val queue = kotlinx.coroutines.channels.Channel<FloatArray>(3)
+        voiceQueue = queue
+        voiceMessage("Preparing bundled speech model…")
+        voiceJob = scope.launch {
+            var model: com.gr4nt.iboard.voice.WhisperLib.Model? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = com.gr4nt.iboard.voice.EmbeddedSpeech.model(this@IBoardService)
+                    model = com.gr4nt.iboard.voice.WhisperLib.load(file.path)
+                        ?: error("Offline speech is unavailable on this device")
+                }
+                val loaded = model ?: error("Unable to load offline speech")
+                voiceModel = loaded
+                if (session != voiceSession || !isInputViewShown) return@launch
+                val capture = com.gr4nt.iboard.voice.PauseChunker(
+                    onChunk = { samples ->
+                        if (session == voiceSession && queue.trySend(samples).isFailure) {
+                            scope.launch { if (session == voiceSession) { toast("Speech processing is catching up. Please try a shorter phrase."); cancelVoice() } }
+                        }
+                    },
+                    onLevel = {},
+                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offline… Tap mic to cancel") } } },
+                    onError = { scope.launch { if (session == voiceSession) { toast("Microphone unavailable. Check microphone access."); cancelVoice() } } },
+                    onFinished = { queue.close() },
+                )
+                recorder = capture
+                if (!capture.start()) error("Cannot open microphone. Check microphone access.")
+                voiceMessage("Listening offline · Tap mic to finish")
+                var committed = false
+                for (samples in queue) {
+                    val started = SystemClock.elapsedRealtime()
+                    val progress = launch {
+                        while (session == voiceSession) {
+                            val seconds = (SystemClock.elapsedRealtime() - started) / 1000
+                            val percent = loaded.progress().let { if (it in 1..99) " · $it%" else "" }
+                            val action = if (recorder != null) "mic finishes" else "mic cancels"
+                            keyboard?.voiceStatus = "Transcribing$percent · ${seconds}s · $action"
+                            delay(500)
+                        }
+                    }
+                    val text = try {
+                        withContext(Dispatchers.IO) {
+                            loaded.transcribe(samples, language, com.gr4nt.iboard.voice.WhisperLib.promptFor(language))
+                        }
+                    } finally { progress.cancel() }
+                    if (session != voiceSession || currentInputConnection !== connection || !isInputViewShown) break
+                    if (text.isNotBlank()) {
+                        connection.finishComposingText()
+                        val preceding = connection.getTextBeforeCursor(1, 0)?.lastOrNull()
+                        val prefix = if (preceding != null && !preceding.isWhitespace()) " " else ""
+                        if (!connection.commitText(prefix + text + " ", 1)) error("This app did not accept the dictated text")
+                        committed = true
+                        refresh()
+                    }
+                    voiceMessage(if (recorder != null) "Listening offline · Tap mic to finish" else "Finishing offline · Tap mic to cancel")
+                }
+                if (!committed && session == voiceSession) toast("No speech recognized. Please try again closer to the microphone.")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (session == voiceSession) toast(e.message ?: "Offline dictation failed")
+            } finally {
+                // withContext waits for native inference to finish before freeing the model.
+                model?.let { loaded -> withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { loaded.close() } }
+                if (session == voiceSession) {
+                    voiceModel = null
+                    recorder?.stop(); recorder = null; queue.cancel(); voiceQueue = null
+                    voiceMessage(null)
+                }
+            }
+        }
+    }
 
     // ------------------------------------------------------------ lifecycle
 
@@ -75,7 +191,6 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         super.onCreate()
         prefs = Prefs(this)
         prefs.sp.registerOnSharedPreferenceChangeListener(prefListener)
-        ai = AiPredictor(prefs)
         clipStore = ClipboardStore(this).apply {
             enabled = prefs.clipboardHistory
             onChanged = { clipPanel?.refresh() }
@@ -84,6 +199,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        if (!prefs.sp.getBoolean("voice_typing", true)) cancelVoice()
         // Settings changed while the keyboard is on screen (e.g. the test box): rebuild it live.
         keyboard?.post {
             val night = KeyboardTheme.isNight(this, prefs)
@@ -96,11 +212,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onDestroy() {
+        cancelVoice()
         prefs.sp.unregisterOnSharedPreferenceChangeListener(prefListener)
-        voice?.destroy()
-        cancelOffline()
-        voiceWorker.execute { whisper?.close(); whisper = null; rewriter.close() }
-        voiceWorker.shutdown()
+        liveBlur?.close()
         clipStore.stop()
         suggester?.user?.save()
         scope.cancel()
@@ -134,6 +248,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             v.setPadding(0, 0, 0, nav)
             insets
         }
+        liveBlur?.close()
+        liveBlur = window?.window?.let { LiveKeyboardBlur(this, it, frame, t, prefs.bgOpacity) }
         root = frame
         keyboard = kv
         emojiPanel = null
@@ -142,7 +258,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         return frame
     }
 
+    // Keep the app visible on phones and tablets; never switch to the old fullscreen extract editor.
+    override fun onEvaluateFullscreenMode(): Boolean = false
+
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
+        cancelVoice()
         super.onStartInputView(info, restarting)
         clipStore.enabled = prefs.clipboardHistory
         val night = KeyboardTheme.isNight(this, prefs)
@@ -178,7 +298,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             )
 
         page = if (cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE ||
-            cls == InputType.TYPE_CLASS_DATETIME) Page.SYMBOLS else Page.LETTERS
+            cls == InputType.TYPE_CLASS_DATETIME) Page.NUMBER_PAD else Page.LETTERS
         shift = ShiftState.OFF
         lastAutoCorrect = null
         spaceAutoInserted = false
@@ -190,13 +310,15 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         keyboard?.animateIn()
     }
 
+    override fun onFinishInput() {
+        cancelVoice()
+        super.onFinishInput()
+    }
+
     override fun onFinishInputView(finishingInput: Boolean) {
+        cancelVoice()
         super.onFinishInputView(finishingInput)
-        aiJob?.cancel()
-        stopVoice()
         endEmojiSearch()
-        transformJob?.cancel()
-        closeMenu()
         keyboard?.cancelTouches()
         suggester?.user?.save()
     }
@@ -231,7 +353,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val info = currentInputEditorInfo
         kv.layout = Layouts.build(
             lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
-            utilityRow = prefs.utilityRow, voice = prefs.voiceTyping,
+            utilityRow = prefs.utilityRow,
         )
         kv.languageLabel = Prefs.languageLabel(lang)
         val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
@@ -243,7 +365,6 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEARCH, EditorInfo.IME_ACTION_SEND,
         )
         kv.shift = if (page == Page.LETTERS) shift else ShiftState.OFF
-        kv.aiActive = ai.isConfigured && !incognito && !password
     }
 
     private fun setPage(p: Page) {
@@ -255,12 +376,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     // ------------------------------------------------------------ KeyboardView.Listener
 
     override fun onKey(key: Key) {
-        if (menu != Menu.NONE && key.type != KeyType.AI) closeMenu()
+        if (key.type == KeyType.MIC) { toggleVoice(); return }
+        if (voiceJob?.isActive == true) cancelVoice()
         if (emojiQuery != null) {
             when (key.type) {
                 KeyType.CHAR -> { emojiQuery!!.append(key.label.lowercase()); searchEmoji() }
                 KeyType.SPACE -> { emojiQuery!!.append(' '); searchEmoji() }
                 KeyType.RETURN, KeyType.EMOJI -> { endEmojiSearch(); showEmoji() }
+                KeyType.TO_NUMBER_PAD -> setPage(Page.NUMBER_PAD)
                 KeyType.TO_SYMBOLS -> setPage(Page.SYMBOLS)
                 KeyType.TO_LETTERS -> setPage(Page.LETTERS)
                 KeyType.TO_MORE_SYMBOLS -> setPage(Page.MORE_SYMBOLS)
@@ -273,14 +396,13 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             KeyType.CHAR -> typeText(key.label)
             KeyType.SPACE -> onSpace()
             KeyType.RETURN -> onReturn()
+            KeyType.TO_NUMBER_PAD -> setPage(Page.NUMBER_PAD)
             KeyType.TO_SYMBOLS -> setPage(Page.SYMBOLS)
             KeyType.TO_LETTERS -> setPage(Page.LETTERS)
             KeyType.TO_MORE_SYMBOLS -> setPage(Page.MORE_SYMBOLS)
             KeyType.EMOJI -> showEmoji()
             KeyType.GLOBE -> nextLanguage()
             KeyType.CLIPBOARD -> showClipboard()
-            KeyType.MIC -> toggleVoice()
-            KeyType.AI -> toggleAi()
             KeyType.SETTINGS -> startActivity(Intent(this, SettingsActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
             else -> {}
@@ -304,7 +426,6 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onBackspace(repeat: Int) {
-        if (menu != Menu.NONE) closeMenu()
         emojiQuery?.let { q ->
             if (q.isNotEmpty()) { q.setLength(q.length - 1); searchEmoji() }
             return
@@ -323,7 +444,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             ic.deleteSurroundingText(lac.second.length + lac.third.length, 0)
             ic.commitText(lac.first, 1)
             ic.endBatchEdit()
-            suggester?.user?.trust(lac.first)
+            if (!incognito && prefs.learnWords) suggester?.user?.trust(lac.first)
             lastAutoCorrect = null
             return
         }
@@ -373,16 +494,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 ic.commitText(s.text, 1)
                 pastedClip = s.text
             }
-            Suggestion.Kind.PHRASE -> {
-                if (word.isNotEmpty()) ic.deleteSurroundingText(word.length, 0)
-                ic.commitText(s.text + " ", 1)
-                spaceAutoInserted = true
-            }
             else -> {
                 if (word.isNotEmpty()) ic.deleteSurroundingText(word.length, 0)
                 ic.commitText(s.text + " ", 1)
                 spaceAutoInserted = true
-                if (s.kind == Suggestion.Kind.LITERAL) suggester?.user?.trust(s.text)
+                if (s.kind == Suggestion.Kind.LITERAL && !incognito && prefs.learnWords) suggester?.user?.trust(s.text)
                 learn(s.text)
             }
         }
@@ -396,155 +512,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         showClipboard()
     }
 
-    override fun onAiButton() {
-        feedback(KeyType.CHAR)
-        if (!ai.isConfigured) {
-            Toast.makeText(this, "Add an AI API key in iBoard settings to turn on AI predictions", Toast.LENGTH_LONG).show()
-        } else ai.lastError?.let {
-            Toast.makeText(this, "AI: $it", Toast.LENGTH_LONG).show()
-        }
+    override fun onKeyFeedback(key: Key) = feedback(key.type)
+
+    override fun onSettingsButton() {
         startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    override fun onKeyFeedback(key: Key) = feedback(key.type)
-
-    /** ✨ in the capsule: turns AI predictions on/off, or opens settings if no API key is set yet. */
-    // ------------------------------------------------------------ ✨ AI menu: predictions, translate, fix grammar
-
-    private enum class Menu { NONE, AI, TRANSLATE, UNDO }
-    private var menu = Menu.NONE
-    private var undo: Pair<String, String>? = null // original text, AI result
-    private var transformJob: Job? = null
-
-    private val translateTargets = listOf(
-        "EN" to "English", "ES" to "Spanish", "FR" to "French", "PT" to "Portuguese", "DE" to "German",
-        "AR" to "Arabic", "中文" to "Simplified Chinese", "HI" to "Hindi", "TWI" to "Twi (Akan)",
-    )
-
-    /** ✨ in the capsule opens the AI menu (or settings if no API key is set yet). */
-    private fun toggleAi() {
-        if (!prefs.aiConsent) {
-            // Prominent disclosure first: nothing is sent until the user agrees.
-            startActivity(com.gr4nt.iboard.settings.ConsentActivity.intent(this, com.gr4nt.iboard.settings.ConsentActivity.MODE_AI)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return
-        }
-        if (prefs.aiKey.isEmpty()) {
-            Toast.makeText(this, "Add an AI API key in iBoard settings to use AI features", Toast.LENGTH_LONG).show()
-            startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return
-        }
-        if (menu == Menu.AI) { closeMenu(); return }
-        showMenu(Menu.AI)
-    }
-
-    private fun showMenu(m: Menu) {
-        menu = m
-        val kv = keyboard ?: return
-        when (m) {
-            Menu.AI -> {
-                kv.chipAccent = if (prefs.aiEnabled) 0 else -1
-                kv.chips = listOf(if (prefs.aiEnabled) "Predict: On" else "Predict: Off", "Translate", "Fix Grammar", "✕")
-            }
-            Menu.TRANSLATE -> {
-                kv.chipAccent = -1
-                kv.chips = listOf("‹") + translateTargets.map { it.first }
-            }
-            Menu.UNDO -> {
-                kv.chipAccent = 1
-                kv.chips = listOf("↶ Original", "Done")
-            }
-            Menu.NONE -> kv.chips = null
-        }
-    }
-
-    private fun closeMenu() {
-        menu = Menu.NONE
-        undo = null
-        keyboard?.chips = null
-    }
-
-    override fun onChip(index: Int) {
-        feedback(KeyType.CHAR)
-        when (menu) {
-            Menu.AI -> when (index) {
-                0 -> {
-                    val on = !prefs.aiEnabled
-                    prefs.sp.edit().putBoolean(Prefs.AI_ENABLED, on).apply()
-                    showMenu(Menu.AI)
-                    refresh()
-                }
-                1 -> showMenu(Menu.TRANSLATE)
-                2 -> runTransform("Correct the spelling, grammar and punctuation. Do not change the meaning or language.", "Fixing…")
-                else -> closeMenu()
-            }
-            Menu.TRANSLATE -> {
-                if (index == 0) { showMenu(Menu.AI); return }
-                val (_, language) = translateTargets.getOrNull(index - 1) ?: return
-                runTransform("Translate the text into $language. If it is already in $language, return it unchanged.",
-                    "Translating to $language…")
-            }
-            Menu.UNDO -> {
-                if (index == 0) undoTransform()
-                closeMenu()
-            }
-            Menu.NONE -> {}
-        }
-    }
-
-    /** Sends the selected text (or the whole field) to the AI and replaces it with the result. */
-    private fun runTransform(instruction: String, status: String) {
-        val ic = currentInputConnection ?: return
-        if (password) { closeMenu(); return }
-        val selected = ic.getSelectedText(0)?.toString().orEmpty()
-        val before = ic.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
-        val after = ic.getTextAfterCursor(8000, 0)?.toString().orEmpty()
-        val source = selected.ifEmpty { before + after }
-        if (source.isBlank()) {
-            Toast.makeText(this, "Type or select some text first", Toast.LENGTH_SHORT).show()
-            closeMenu(); return
-        }
-        val kv = keyboard ?: return
-        kv.chips = null
-        kv.statusText = status
-        kv.aiBusy = true
-        transformJob?.cancel()
-        transformJob = scope.launch {
-            var err: String? = null
-            val result = try { ai.transform(source, instruction) } catch (e: Exception) { err = e.message; null }
-            kv.aiBusy = false
-            kv.statusText = null
-            val conn = currentInputConnection
-            if (result.isNullOrBlank() || conn == null) {
-                Toast.makeText(this@IBoardService, "AI couldn't do that: ${err?.take(120) ?: "no response"}", Toast.LENGTH_LONG).show()
-                closeMenu(); return@launch
-            }
-            conn.beginBatchEdit()
-            if (selected.isNotEmpty()) {
-                conn.commitText(result, 1)
-            } else {
-                // Replace the whole field: text before and after the cursor.
-                val b = conn.getTextBeforeCursor(8000, 0)?.length ?: 0
-                val a = conn.getTextAfterCursor(8000, 0)?.length ?: 0
-                conn.deleteSurroundingText(b, a)
-                conn.commitText(result, 1)
-            }
-            conn.endBatchEdit()
-            undo = source to result
-            showMenu(Menu.UNDO)
-        }
-    }
-
-    private fun undoTransform() {
-        val (original, result) = undo ?: return
-        val ic = currentInputConnection ?: return
-        val before = ic.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
-        if (!before.endsWith(result)) return
-        ic.beginBatchEdit()
-        ic.deleteSurroundingText(result.length, 0)
-        ic.commitText(original, 1)
-        ic.endBatchEdit()
-    }
 
     override fun onEmojiResult(text: String) {
         feedback(KeyType.CHAR)
@@ -566,7 +539,6 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun startEmojiSearch() {
         closePanels()
         emojiQuery = StringBuilder()
-        aiJob?.cancel()
         page = Page.LETTERS
         shift = ShiftState.OFF
         updateLayout()
@@ -704,7 +676,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         // The word may already be committed; the one before it is the context.
         val prev = if (tokens.lastOrNull()?.trimEnd('.', ',', '!', '?') == word) tokens.getOrNull(tokens.size - 2)
         else tokens.lastOrNull()
-        s.user.learn(word, prev?.trim { !it.isLetter() })
+        val committed = tokens.lastOrNull()?.trimEnd('.', ',', '!', '?')?.equals(word, true) == true
+        val prev2 = tokens.getOrNull(tokens.size - if (committed) 3 else 2)
+        s.user.learn(word, prev?.trim { !it.isLetter() }, prev2?.trim { !it.isLetter() })
     }
 
     // ------------------------------------------------------------ suggestions
@@ -752,97 +726,29 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val word = currentWord(before)
         val head = before.substring(0, before.length - word.length)
         val tokens = head.trimEnd().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        val prev = tokens.lastOrNull()?.trim { !it.isLetter() }?.takeIf { it.isNotEmpty() }
+        val rawPrev = tokens.lastOrNull()?.trim { !it.isLetter() }?.takeIf { it.isNotEmpty() }
         val trimmedHead = head.trimEnd()
         val sentenceStart = trimmedHead.isEmpty() || trimmedHead.last() in ".!?\n"
 
+        val prev = if (sentenceStart) null else rawPrev
+        val prev2 = if (sentenceStart) null else tokens.getOrNull(tokens.size - 2)?.trim { !it.isLetter() }
         val s = suggester
         val local: List<Suggestion>
         pendingAutoCorrect = null
         if (word.isNotEmpty()) {
             if (s == null) local = listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else {
-                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect, sentenceStart)
+                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect, sentenceStart, prev2)
                 pendingAutoCorrect = r.autoCorrect
                 local = r.items
             }
         } else {
-            local = s?.nextWords(prev, sentenceStart) ?: emptyList()
+            local = s?.nextWords(prev, sentenceStart, prev2) ?: emptyList()
         }
 
         val clip = if (word.isEmpty() && prefs.clipboardHistory) clipStore.recent(90_000)
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
 
-        lastContext = before
-        val aiOn = ai.isConfigured && !incognito && fieldKind == FieldKind.TEXT
-        kv.aiActive = aiOn
-        val cached = if (aiOn) ai.cached(before, lang) else null
-        show(merge(word, local, cached, clip))
-
-        aiJob?.cancel()
-        kv.aiBusy = false
-        if (aiOn && cached == null && (word.isNotEmpty() || before.isNotBlank())) {
-            aiJob = scope.launch {
-                delay(260)
-                kv.aiBusy = true
-                val p = ai.predict(before, word, lang)
-                kv.aiBusy = false
-                if (p != null && lastContext == before) {
-                    show(merge(word, local, p, clip))
-                }
-            }
-        }
-    }
-
-    private fun merge(
-        word: String,
-        local: List<Suggestion>,
-        aiPred: AiPredictor.Prediction?,
-        clip: com.gr4nt.iboard.clipboard.ClipItem?,
-    ): List<Suggestion> {
-        val out = ArrayList<Suggestion>()
-        fun has(t: String) = out.any { it.text.equals(t, ignoreCase = true) && it.kind != Suggestion.Kind.PHRASE }
-        val aiWords = aiPred?.words.orEmpty().map { Suggester.applyCase(word, it) }
-
-        if (word.isNotEmpty() && aiWords.isEmpty()) return local.take(3)
-        if (word.isNotEmpty()) {
-            val sg = suggester
-            var auto = pendingAutoCorrect
-            val aiTop = aiWords.firstOrNull()
-            if (aiTop != null && sg != null && prefs.autoCorrect && !noAutoCorrect) {
-                if (aiTop.equals(word, true)) {
-                    auto = null // the model says the typed word fits the sentence
-                } else {
-                    val typedValid = sg.dictionary.contains(word) || sg.user.knows(word)
-                    val dist = Dictionary.distance(word.lowercase(), aiTop.lowercase(), sg.neighbors, 2.5f)
-                    val isCompletion = Dictionary.normalize(aiTop).startsWith(Dictionary.normalize(word))
-                    // Context-aware correction: trust the model when its word is a near miss of what was typed.
-                    // A real word is only replaced for a one-key slip ("form" → "from"), never a different word.
-                    val maxDist = if (typedValid) 0.75f else 2.0f
-                    if (dist <= maxDist && !isCompletion && sg.dictionary.contains(aiTop)) auto = aiTop
-                }
-            }
-            pendingAutoCorrect = auto
-            if (auto != null) {
-                out += Suggestion(auto, if (auto == aiTop) Suggestion.Kind.AI else Suggestion.Kind.WORD, autoCorrect = true)
-                out += Suggestion(word, Suggestion.Kind.LITERAL)
-            } else {
-                aiWords.firstOrNull { !it.equals(word, true) }?.let { out += Suggestion(it, Suggestion.Kind.AI) }
-                local.firstOrNull { it.kind == Suggestion.Kind.LITERAL }?.let { if (!has(it.text)) out += it }
-            }
-            aiWords.drop(1).forEach { if (!has(it) && !it.equals(word, true) && out.size < 3) out += Suggestion(it, Suggestion.Kind.AI) }
-            local.forEach { if (!has(it.text) && out.size < 3 && !it.autoCorrect) out += it.copy(autoCorrect = false) }
-        } else {
-            clip?.let { out += Suggestion(it.text.replace('\n', ' '), Suggestion.Kind.CLIP) }
-            aiWords.forEach { if (!has(it) && out.size < 2) out += Suggestion(it, Suggestion.Kind.AI) }
-            local.forEach { if (!has(it.text) && out.size < 3) out += it }
-        }
-        val phrase = aiPred?.phrase.orEmpty()
-        if (phrase.contains(' ') && clip == null) {
-            val p = Suggester.applyCase(word.ifEmpty { phrase }, phrase)
-            val idx = 2
-            if (out.size > idx) out[idx] = Suggestion(p, Suggestion.Kind.PHRASE) else out += Suggestion(p, Suggestion.Kind.PHRASE)
-        }
-        return out.take(3)
+        show(if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3))
     }
 
     private fun show(list: List<Suggestion>) {
@@ -930,250 +836,6 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             }
             am.playSoundEffect(fx, -1f)
         }
-    }
-
-    // ------------------------------------------------------------ voice typing
-
-    private var voice: android.speech.SpeechRecognizer? = null
-    private var listening = false   // the user has dictation switched on (until they tap 🎤 again or go quiet)
-    private var dictationChain: Job? = null
-
-    private fun toggleVoice() {
-        if (listening) { stopVoice(); return }
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startActivity(com.gr4nt.iboard.settings.ConsentActivity.intent(this, com.gr4nt.iboard.settings.ConsentActivity.MODE_MIC)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return
-        }
-        if (prefs.offlineDictation && models.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) != null &&
-            com.gr4nt.iboard.voice.WhisperLib.available()
-        ) {
-            startOffline(); return
-        }
-        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
-            Toast.makeText(this, "No speech recognition service on this phone. Download Offline Dictation in iBoard settings.",
-                Toast.LENGTH_LONG).show()
-            return
-        }
-        listening = true
-        keyboard?.listening = true
-        keyboard?.statusText = "Starting…"
-        listenOnce()
-    }
-
-    /** One recognition pass; keeps going pass after pass, like iOS, until the user stops or stays quiet. */
-    private fun listenOnce() {
-        val r = voice ?: android.speech.SpeechRecognizer.createSpeechRecognizer(this).also { voice = it }
-        r.setRecognitionListener(object : android.speech.RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) { if (listening) keyboard?.statusText = "Listening…" }
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { if (listening) keyboard?.statusText = "…" }
-            override fun onError(error: Int) {
-                if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
-                    error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
-                    error != android.speech.SpeechRecognizer.ERROR_CLIENT
-                ) Toast.makeText(this@IBoardService, "Voice typing error ($error)", Toast.LENGTH_SHORT).show()
-                endVoice() // silence or failure ends dictation
-            }
-            override fun onResults(results: android.os.Bundle?) {
-                val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (!text.isNullOrBlank()) commitDictation(text)
-                if (listening) keyboard?.postDelayed({ if (listening) listenOnce() }, 150) else endVoice()
-            }
-            override fun onPartialResults(partial: android.os.Bundle?) {
-                val text = partial?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (!text.isNullOrBlank() && listening) keyboard?.statusText = text
-            }
-            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-        })
-        val tag = when (lang) {
-            "es" -> "es-ES"; "fr" -> "fr-FR"; "pt" -> "pt-BR"; "de" -> "de-DE"; "ar" -> "ar"; else -> "en-US"
-        }
-        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, tag)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // Ask the recognizer for automatic punctuation and formatting (Android 13+, ignored elsewhere).
-            .putExtra("android.speech.extra.ENABLE_FORMATTING", "quality")
-            .putExtra("android.speech.extra.HIDE_PARTIAL_TRAILING_PUNCTUATION", true)
-            .putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2500L)
-            .putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
-        r.startListening(intent)
-    }
-
-    /**
-     * Punctuates a dictated segment (spoken commands, capitals, end marks) and, when AI is set up,
-     * lets the model polish punctuation with the surrounding sentence as context. Segments are
-     * committed strictly in the order they were spoken.
-     */
-    private fun commitDictation(raw: String) {
-        val prev = dictationChain
-        dictationChain = scope.launch {
-            prev?.join()
-            val ic = currentInputConnection ?: return@launch
-            val before = ic.getTextBeforeCursor(400, 0)?.toString() ?: ""
-            var out = Dictation.format(raw, lang, before)
-            if (prefs.aiConsent && prefs.aiKey.isNotEmpty() && !password && !incognito) {
-                keyboard?.statusText = "Punctuating…"
-                val context = before.takeLast(300)
-                val polished = kotlinx.coroutines.withTimeoutOrNull(4000) {
-                    try {
-                        ai.transform(out, "The text is dictated speech that will be inserted after: «$context». " +
-                            "Fix its punctuation and capitalization, and correct obvious speech-recognition mistakes using that context. " +
-                            "Keep the same words, meaning and language. Return only the corrected dictated text, without the context.")
-                    } catch (_: Exception) { null }
-                }
-                if (!polished.isNullOrBlank() && polished.length < out.length * 2 + 20) out = polished
-                if (listening) keyboard?.statusText = "Listening…" else keyboard?.statusText = null
-            }
-            val conn = currentInputConnection ?: return@launch
-            val last = conn.getTextBeforeCursor(1, 0)?.toString() ?: ""
-            if (last.isNotEmpty() && !last.last().isWhitespace() && out.firstOrNull()?.let { it.isLetterOrDigit() } == true) out = " $out"
-            conn.commitText(if (out.endsWith("\n")) out else "$out ", 1)
-        }
-    }
-
-    private fun stopVoice() {
-        if (offlineActive) { cancelOffline(); return }
-        val wasListening = listening
-        listening = false
-        if (wasListening) voice?.stopListening() // final results still arrive and get committed
-        keyboard?.listening = false
-        keyboard?.statusText = null
-    }
-
-    private fun endVoice() {
-        listening = false
-        keyboard?.listening = false
-        keyboard?.statusText = null
-    }
-
-    // ------------------------------------------------------------ offline dictation (Whisper + Rambler)
-
-    private val models by lazy { com.gr4nt.iboard.voice.ModelStore(this) }
-    private val rewriter by lazy { com.gr4nt.iboard.voice.RamblerRewriter(applicationContext) }
-    private val voiceWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
-    private var whisper: com.gr4nt.iboard.voice.WhisperLib.Model? = null
-    private var chunker: com.gr4nt.iboard.voice.PauseChunker? = null
-    private val offlineText = StringBuilder()
-    @Volatile private var offlineActive = false
-    private var offlineSession = 0
-    private val releaseRewriter = Runnable { voiceWorker.execute { rewriter.close() } }
-
-    private fun startOffline() {
-        val speech = models.active(com.gr4nt.iboard.voice.ModelKind.SPEECH, prefs.speechModel) ?: return
-        val session = ++offlineSession
-        offlineActive = true
-        listening = true
-        synchronized(offlineText) { offlineText.setLength(0) }
-        keyboard?.listening = true
-        keyboard?.statusText = if (whisper?.path == models.file(speech).path) "Listening…" else "Loading offline speech…"
-        val main = android.os.Handler(mainLooper)
-        voiceWorker.execute {
-            val path = models.file(speech).path
-            if (whisper?.path != path) {
-                whisper?.close()
-                whisper = com.gr4nt.iboard.voice.WhisperLib.load(path)
-            }
-            if (whisper == null) {
-                main.post {
-                    Toast.makeText(this, "Couldn't load the offline speech model. Try downloading it again.", Toast.LENGTH_LONG).show()
-                    endVoice(); offlineActive = false
-                }
-                return@execute
-            }
-            val c = com.gr4nt.iboard.voice.PauseChunker(
-                onChunk = { samples -> voiceWorker.execute { transcribeChunk(samples, session) } },
-                onLevel = {},
-                onLongSilence = { main.post { if (offlineSession == session) stopOffline() } },
-            )
-            main.post {
-                if (!offlineActive || offlineSession != session) return@post
-                if (c.start()) {
-                    chunker = c
-                    keyboard?.statusText = "Listening… speak naturally, tap 🎤 when done"
-                } else {
-                    Toast.makeText(this, "Microphone is busy", Toast.LENGTH_SHORT).show()
-                    endVoice(); offlineActive = false
-                }
-            }
-        }
-    }
-
-    /** Runs on the voice worker: speech → text for one chunk, shown live in the bar. */
-    private fun transcribeChunk(samples: FloatArray, session: Int) {
-        val model = whisper ?: return
-        if (session != offlineSession) return
-        val context = synchronized(offlineText) { offlineText.takeLast(200).toString() }
-        val text = model.transcribe(samples, lang, (com.gr4nt.iboard.voice.WhisperLib.promptFor(lang) + " " + context).trim())
-        if (text.isBlank()) return
-        val shown = synchronized(offlineText) {
-            if (offlineText.isNotEmpty()) offlineText.append(' ')
-            offlineText.append(text)
-            offlineText.toString()
-        }
-        keyboard?.post { if (session == offlineSession && (offlineActive || listening)) keyboard?.statusText = shown }
-    }
-
-    /** User tapped 🎤 again (or went quiet): finish transcribing, clean up the ramble, insert it. */
-    private fun stopOffline() {
-        if (!offlineActive) return
-        offlineActive = false
-        listening = false
-        keyboard?.listening = false
-        keyboard?.statusText = "Transcribing…"
-        val session = offlineSession
-        val before = currentInputConnection?.getTextBeforeCursor(400, 0)?.toString() ?: ""
-        val c = chunker
-        chunker = null
-        val main = android.os.Handler(mainLooper)
-        voiceWorker.execute {
-            c?.stop() // flushes the last chunk onto this same worker queue
-            voiceWorker.execute {
-                if (session != offlineSession) return@execute
-                val raw = synchronized(offlineText) { offlineText.toString().trim() }
-                if (raw.isBlank()) { main.post { keyboard?.statusText = null }; return@execute }
-                val plain = com.gr4nt.iboard.predict.Dictation.format(raw, lang, before)
-                var finalText = com.gr4nt.iboard.voice.RambleRules.clean(raw, lang, before)
-                val rewriteModel = if (prefs.ramblerRewrite) models.active(com.gr4nt.iboard.voice.ModelKind.REWRITE, prefs.rewriteModel) else null
-                if (rewriteModel != null) {
-                    main.post { keyboard?.statusText = "Polishing…" }
-                    rewriter.rewrite(models.file(rewriteModel).path, finalText, lang)?.let { finalText = it }
-                    main.removeCallbacks(releaseRewriter)
-                    main.postDelayed(releaseRewriter, 120_000) // free the model's memory when idle
-                }
-                main.post {
-                    keyboard?.statusText = null
-                    if (session != offlineSession) return@post
-                    insertDictated(finalText, plain)
-                }
-            }
-        }
-    }
-
-    private fun insertDictated(text: String, original: String) {
-        val ic = currentInputConnection ?: return
-        val last = ic.getTextBeforeCursor(1, 0)?.toString() ?: ""
-        var out = text
-        if (last.isNotEmpty() && !last.last().isWhitespace() && out.firstOrNull()?.isLetterOrDigit() == true) out = " $out"
-        if (!out.endsWith("\n")) out += " "
-        ic.commitText(out, 1)
-        if (original.trim() != text.trim()) {
-            // Offer the word-for-word transcript, like Rambler's "original" option.
-            undo = (if (out.startsWith(" ")) " " else "") + original.trim() + " " to out
-            showMenu(Menu.UNDO)
-        }
-    }
-
-    private fun cancelOffline() {
-        offlineActive = false
-        offlineSession++
-        val c = chunker
-        chunker = null
-        voiceWorker.execute { c?.stop() }
-        endVoice()
     }
 
     companion object {

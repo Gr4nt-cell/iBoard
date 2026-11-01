@@ -2,7 +2,7 @@ name: Build iBoard APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, gpt]
   workflow_dispatch:
 
 permissions:
@@ -23,8 +23,8 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Fetch whisper.cpp (offline speech engine)
-        run: git clone --depth 1 --branch v1.7.6 https://github.com/ggml-org/whisper.cpp app/src/main/cpp/whisper.cpp
+      - name: Prepare pinned speech runtime
+        run: python3 tools/prepare_speech.py
 
       - name: Prepare upload key (when the repository secrets are set)
         env:
