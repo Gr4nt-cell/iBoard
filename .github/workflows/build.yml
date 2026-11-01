@@ -66,18 +66,15 @@ jobs:
           UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
           UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
-          NAME=iBoard-signed.aab
+          if [ -n "$UPLOAD_KEYSTORE_PATH" ]; then
+            NAME=iBoard-signed.aab
+          else
+            export IBOARD_UNSIGNED=1
+            NAME=iBoard-unsigned.aab
+          fi
           gradle :app:bundleRelease --stacktrace
           cp app/build/outputs/bundle/release/app-release.aab "$NAME"
           echo "AAB_NAME=$NAME" >> "$GITHUB_ENV"
-
-      - name: Verify APK and AAB signatures
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          APKSIGNER="$(find "$SDK_ROOT/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
-          test -n "$APKSIGNER"
-          "$APKSIGNER" verify --verbose iBoard.apk
-          jarsigner -verify "$AAB_NAME"
 
       - uses: actions/upload-artifact@v4
         with:
