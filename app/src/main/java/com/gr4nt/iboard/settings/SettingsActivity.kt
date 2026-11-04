@@ -273,7 +273,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val hasCustom = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this).exists()
-        val emoE = mutableListOf("iOS-style (Built-in)"); val emoV = mutableListOf("bundled")
+        val emoE = mutableListOf("Phone's Emoji (Built-in)"); val emoV = mutableListOf("bundled")
         if (hasCustom) { emoE += "Imported Font"; emoV += "custom" }
         l.section("Emoji", "An iOS-style emoji font is built in. No extra emoji download is needed. You can import a different font entirely offline.") {
             navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {

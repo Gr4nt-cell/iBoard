@@ -5,12 +5,16 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 
-/** Draws complete Unicode emoji sequences using the bundled color font, without bitmap artwork. */
+/**
+ * Draws emoji with the font the user imported on their own phone (Settings › Emoji), or with the
+ * phone's built-in emoji font. No third-party emoji artwork is shipped inside the app.
+ */
 object EmojiImages {
     @Volatile var customTypeface: Typeface? = null
         private set
     private var supported: Set<String> = emptySet()
     private var imported = false
+    @Volatile private var configured = false
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
     fun customFontFile(context: Context) = java.io.File(context.filesDir, "custom_emoji.ttf")
@@ -18,17 +22,15 @@ object EmojiImages {
     fun configure(context: Context, style: String) {
         imported = style == "custom" && customFontFile(context).exists()
         customTypeface = if (imported) runCatching { Typeface.createFromFile(customFontFile(context)) }.getOrNull() else null
-        if (customTypeface == null) {
-            imported = false
-            customTypeface = Typeface.createFromAsset(context.assets, "fonts/ios-style.ttf")
-        }
-        supported = context.assets.open("fonts/supported_emoji.txt").bufferedReader().useLines { it.toSet() }
-        paint.typeface = customTypeface
+        if (customTypeface == null) imported = false
+        supported = emptySet()
+        paint.typeface = customTypeface // null = the phone's own emoji font
         EmojiData.setTypeface(customTypeface)
+        configured = true
     }
-    fun init(context: Context) { if (customTypeface == null) configure(context, "bundled") }
+    fun init(context: Context) { if (!configured) configure(context, "bundled") }
     fun key(emoji: String): String = emoji.codePoints().toArray().filter { it != 0xFE0F }.joinToString("_") { Integer.toHexString(it) }
-    fun has(emoji: String): Boolean = if (imported) paint.hasGlyph(emoji) else key(emoji) in supported
+    fun has(emoji: String): Boolean = runCatching { paint.hasGlyph(emoji) }.getOrDefault(true)
 
     fun draw(context: Context, canvas: Canvas, emoji: String, cx: Float, cy: Float, size: Float) {
         init(context)

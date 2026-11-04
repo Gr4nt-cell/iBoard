@@ -5,7 +5,7 @@ from pathlib import Path
 import json,uharfbuzz as hb
 from fontTools.ttLib import TTFont
 root=Path(__file__).resolve().parents[1];assets=root/'app/src/main/assets'
-path=assets/'fonts/ios-style.ttf';data=path.read_bytes();face=hb.Face(data);font=hb.Font(face);tt=TTFont(path)
+path=root/'design/local-only/ios-style.ttf';data=path.read_bytes();face=hb.Face(data);font=hb.Font(face);tt=TTFont(path)
 def shape(s):
  b=hb.Buffer();b.add_str(s);b.guess_segment_properties();hb.shape(font,b);return [g.codepoint for g in b.glyph_infos]
 def key(s):return '_'.join(format(ord(c),'x') for c in s if ord(c)!=0xfe0f)
@@ -18,7 +18,7 @@ for line in lines:
  if p[2]=='1':
   for tone in ['🏻','🏼','🏽','🏾','🏿']:sequences.add(p[1][0]+tone+p[1][1:].lstrip('\ufe0f'))
 supported={key(s) for s in sequences if (g:=shape(s)) and all(i!=0 for i in g)}
-(assets/'fonts/supported_emoji.txt').write_text('\n'.join(sorted(supported))+'\n')
+(root/'design/local-only/supported_emoji.txt').write_text('\n'.join(sorted(supported))+'\n')
 out=root/'design/emoji';out.mkdir(parents=True,exist_ok=True)
 for emoji in ['😀','😃','😍','🥰','😎','😂','👍','❤️','🎉','🔥','🇬🇭','🙏']:
  glyphs=shape(emoji)
