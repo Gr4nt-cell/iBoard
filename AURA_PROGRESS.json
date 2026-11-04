@@ -1,0 +1,7 @@
+{
+  "mapped": 250,
+  "new_assets": 66,
+  "candidate_single_pictographs": 2848,
+  "candidate_flag_pairs": 676,
+  "notes": "Candidate manifest is not a normative Unicode emoji-test list; only mapped PNGs are rendered; no fallback or full coverage claimed."
+}

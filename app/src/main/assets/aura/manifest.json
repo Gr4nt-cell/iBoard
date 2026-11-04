@@ -1,0 +1,646 @@
+{
+  "style": "AURA realistic 3D",
+  "note": "Preview-sheet-derived 512px images; these are not native 4K renders.",
+  "items": [
+    {
+      "unicode": "1f604",
+      "file": "1f604.png"
+    },
+    {
+      "unicode": "1f602",
+      "file": "1f602.png"
+    },
+    {
+      "unicode": "1f60d",
+      "file": "1f60d.png"
+    },
+    {
+      "unicode": "1f618",
+      "file": "1f618.png"
+    },
+    {
+      "unicode": "1f60e",
+      "file": "1f60e.png"
+    },
+    {
+      "unicode": "1f929",
+      "file": "1f929.png"
+    },
+    {
+      "unicode": "1f607",
+      "file": "1f607.png"
+    },
+    {
+      "unicode": "1f917",
+      "file": "1f917.png"
+    },
+    {
+      "unicode": "1f61b",
+      "file": "1f61b.png"
+    },
+    {
+      "unicode": "1f61c",
+      "file": "1f61c.png"
+    },
+    {
+      "unicode": "1f642",
+      "file": "1f642.png"
+    },
+    {
+      "unicode": "1f62d",
+      "file": "1f62d.png"
+    },
+    {
+      "unicode": "1f61f",
+      "file": "1f61f.png"
+    },
+    {
+      "unicode": "1f621",
+      "file": "1f621.png"
+    },
+    {
+      "unicode": "1f631",
+      "file": "1f631.png"
+    },
+    {
+      "unicode": "1f625",
+      "file": "1f625.png"
+    },
+    {
+      "unicode": "1f468",
+      "file": "1f468.png"
+    },
+    {
+      "unicode": "1f469",
+      "file": "1f469.png"
+    },
+    {
+      "unicode": "1f477",
+      "file": "1f477.png"
+    },
+    {
+      "unicode": "1f468_200d_1f373",
+      "file": "1f468_200d_1f373.png"
+    },
+    {
+      "unicode": "1f9d5",
+      "file": "1f9d5.png"
+    },
+    {
+      "unicode": "1f478",
+      "file": "1f478.png"
+    },
+    {
+      "unicode": "1f466",
+      "file": "1f466.png"
+    },
+    {
+      "unicode": "1f934",
+      "file": "1f934.png"
+    },
+    {
+      "unicode": "1f44d",
+      "file": "1f44d.png"
+    },
+    {
+      "unicode": "1f44e",
+      "file": "1f44e.png"
+    },
+    {
+      "unicode": "1f44c",
+      "file": "1f44c.png"
+    },
+    {
+      "unicode": "270c",
+      "file": "270c.png"
+    },
+    {
+      "unicode": "1f91e",
+      "file": "1f91e.png"
+    },
+    {
+      "unicode": "1f64c",
+      "file": "1f64c.png"
+    },
+    {
+      "unicode": "1f44f",
+      "file": "1f44f.png"
+    },
+    {
+      "unicode": "1f64f",
+      "file": "1f64f.png"
+    },
+    {
+      "unicode": "2764",
+      "file": "2764.png"
+    },
+    {
+      "unicode": "1f497",
+      "file": "1f497.png"
+    },
+    {
+      "unicode": "1f496",
+      "file": "1f496.png"
+    },
+    {
+      "unicode": "1f494",
+      "file": "1f494.png"
+    },
+    {
+      "unicode": "1f9e1",
+      "file": "1f9e1.png"
+    },
+    {
+      "unicode": "1f49a",
+      "file": "1f49a.png"
+    },
+    {
+      "unicode": "1f499",
+      "file": "1f499.png"
+    },
+    {
+      "unicode": "1f49c",
+      "file": "1f49c.png"
+    },
+    {
+      "unicode": "2764_200d_1f525",
+      "file": "2764_200d_1f525.png"
+    },
+    {
+      "unicode": "1f49d",
+      "file": "1f49d.png"
+    },
+    {
+      "unicode": "1f498",
+      "file": "1f498.png"
+    },
+    {
+      "unicode": "267e",
+      "file": "267e.png"
+    },
+    {
+      "unicode": "2b50",
+      "file": "2b50.png"
+    },
+    {
+      "unicode": "1f31f",
+      "file": "1f31f.png"
+    },
+    {
+      "unicode": "2728",
+      "file": "2728.png"
+    },
+    {
+      "unicode": "1f4a5",
+      "file": "1f4a5.png"
+    },
+    {
+      "unicode": "1f981",
+      "file": "1f981.png"
+    },
+    {
+      "unicode": "1f418",
+      "file": "1f418.png"
+    },
+    {
+      "unicode": "1f992",
+      "file": "1f992.png"
+    },
+    {
+      "unicode": "1f993",
+      "file": "1f993.png"
+    },
+    {
+      "unicode": "1f43c",
+      "file": "1f43c.png"
+    },
+    {
+      "unicode": "1f436",
+      "file": "1f436.png"
+    },
+    {
+      "unicode": "1f431",
+      "file": "1f431.png"
+    },
+    {
+      "unicode": "1f430",
+      "file": "1f430.png"
+    },
+    {
+      "unicode": "1f435",
+      "file": "1f435.png"
+    },
+    {
+      "unicode": "1f98d",
+      "file": "1f98d.png"
+    },
+    {
+      "unicode": "1f98a",
+      "file": "1f98a.png"
+    },
+    {
+      "unicode": "1f43a",
+      "file": "1f43a.png"
+    },
+    {
+      "unicode": "1f42e",
+      "file": "1f42e.png"
+    },
+    {
+      "unicode": "1f437",
+      "file": "1f437.png"
+    },
+    {
+      "unicode": "1f413",
+      "file": "1f413.png"
+    },
+    {
+      "unicode": "1f985",
+      "file": "1f985.png"
+    },
+    {
+      "unicode": "1f33a",
+      "file": "1f33a.png"
+    },
+    {
+      "unicode": "1f337",
+      "file": "1f337.png"
+    },
+    {
+      "unicode": "1f33b",
+      "file": "1f33b.png"
+    },
+    {
+      "unicode": "1f339",
+      "file": "1f339.png"
+    },
+    {
+      "unicode": "1f338",
+      "file": "1f338.png"
+    },
+    {
+      "unicode": "1f343",
+      "file": "1f343.png"
+    },
+    {
+      "unicode": "1f340",
+      "file": "1f340.png"
+    },
+    {
+      "unicode": "1f333",
+      "file": "1f333.png"
+    },
+    {
+      "unicode": "1f334",
+      "file": "1f334.png"
+    },
+    {
+      "unicode": "1f335",
+      "file": "1f335.png"
+    },
+    {
+      "unicode": "1f3d4",
+      "file": "1f3d4.png"
+    },
+    {
+      "unicode": "1f30a",
+      "file": "1f30a.png"
+    },
+    {
+      "unicode": "1f30b",
+      "file": "1f30b.png"
+    },
+    {
+      "unicode": "1f308",
+      "file": "1f308.png"
+    },
+    {
+      "unicode": "2600",
+      "file": "2600.png"
+    },
+    {
+      "unicode": "1f315",
+      "file": "1f315.png"
+    },
+    {
+      "unicode": "1f354",
+      "file": "1f354.png"
+    },
+    {
+      "unicode": "1f35f",
+      "file": "1f35f.png"
+    },
+    {
+      "unicode": "1f355",
+      "file": "1f355.png"
+    },
+    {
+      "unicode": "1f357",
+      "file": "1f357.png"
+    },
+    {
+      "unicode": "1f969",
+      "file": "1f969.png"
+    },
+    {
+      "unicode": "1f363",
+      "file": "1f363.png"
+    },
+    {
+      "unicode": "1f35c",
+      "file": "1f35c.png"
+    },
+    {
+      "unicode": "1f957",
+      "file": "1f957.png"
+    },
+    {
+      "unicode": "1f34c",
+      "file": "1f34c.png"
+    },
+    {
+      "unicode": "1f34e",
+      "file": "1f34e.png"
+    },
+    {
+      "unicode": "1f96d",
+      "file": "1f96d.png"
+    },
+    {
+      "unicode": "1f347",
+      "file": "1f347.png"
+    },
+    {
+      "unicode": "1f349",
+      "file": "1f349.png"
+    },
+    {
+      "unicode": "1f965",
+      "file": "1f965.png"
+    },
+    {
+      "unicode": "1f369",
+      "file": "1f369.png"
+    },
+    {
+      "unicode": "1f370",
+      "file": "1f370.png"
+    },
+    {
+      "unicode": "26bd",
+      "file": "26bd.png"
+    },
+    {
+      "unicode": "1f3c0",
+      "file": "1f3c0.png"
+    },
+    {
+      "unicode": "1f3be",
+      "file": "1f3be.png"
+    },
+    {
+      "unicode": "1f3d0",
+      "file": "1f3d0.png"
+    },
+    {
+      "unicode": "1f3ae",
+      "file": "1f3ae.png"
+    },
+    {
+      "unicode": "1f3a7",
+      "file": "1f3a7.png"
+    },
+    {
+      "unicode": "1f3b5",
+      "file": "1f3b5.png"
+    },
+    {
+      "unicode": "1f3a4",
+      "file": "1f3a4.png"
+    },
+    {
+      "unicode": "1f3ac",
+      "file": "1f3ac.png"
+    },
+    {
+      "unicode": "1f4f7",
+      "file": "1f4f7.png"
+    },
+    {
+      "unicode": "1f3a8",
+      "file": "1f3a8.png"
+    },
+    {
+      "unicode": "1f389",
+      "file": "1f389.png"
+    },
+    {
+      "unicode": "1f381",
+      "file": "1f381.png"
+    },
+    {
+      "unicode": "1f388",
+      "file": "1f388.png"
+    },
+    {
+      "unicode": "1f3c6",
+      "file": "1f3c6.png"
+    },
+    {
+      "unicode": "1f3c5",
+      "file": "1f3c5.png"
+    },
+    {
+      "unicode": "1f697",
+      "file": "1f697.png"
+    },
+    {
+      "unicode": "1f68c",
+      "file": "1f68c.png"
+    },
+    {
+      "unicode": "2708",
+      "file": "2708.png"
+    },
+    {
+      "unicode": "1f681",
+      "file": "1f681.png"
+    },
+    {
+      "unicode": "1f684",
+      "file": "1f684.png"
+    },
+    {
+      "unicode": "1f6a2",
+      "file": "1f6a2.png"
+    },
+    {
+      "unicode": "1f680",
+      "file": "1f680.png"
+    },
+    {
+      "unicode": "1f6b2",
+      "file": "1f6b2.png"
+    },
+    {
+      "unicode": "1f3df",
+      "file": "1f3df.png"
+    },
+    {
+      "unicode": "26fa",
+      "file": "26fa.png"
+    },
+    {
+      "unicode": "1f525",
+      "file": "1f525.png"
+    },
+    {
+      "unicode": "1f3f0",
+      "file": "1f3f0.png"
+    },
+    {
+      "unicode": "1f3d9",
+      "file": "1f3d9.png"
+    },
+    {
+      "unicode": "1f3e0",
+      "file": "1f3e0.png"
+    },
+    {
+      "unicode": "1f3db",
+      "file": "1f3db.png"
+    },
+    {
+      "unicode": "1f4cd",
+      "file": "1f4cd.png"
+    },
+    {
+      "unicode": "1f4f1",
+      "file": "1f4f1.png"
+    },
+    {
+      "unicode": "1f4bb",
+      "file": "1f4bb.png"
+    },
+    {
+      "unicode": "231a",
+      "file": "231a.png"
+    },
+    {
+      "unicode": "1f50b",
+      "file": "1f50b.png"
+    },
+    {
+      "unicode": "1f50c",
+      "file": "1f50c.png"
+    },
+    {
+      "unicode": "1f4a1",
+      "file": "1f4a1.png"
+    },
+    {
+      "unicode": "1f512",
+      "file": "1f512.png"
+    },
+    {
+      "unicode": "1f511",
+      "file": "1f511.png"
+    },
+    {
+      "unicode": "1f6e0",
+      "file": "1f6e0.png"
+    },
+    {
+      "unicode": "2699",
+      "file": "2699.png"
+    },
+    {
+      "unicode": "1f4bc",
+      "file": "1f4bc.png"
+    },
+    {
+      "unicode": "1f4da",
+      "file": "1f4da.png"
+    },
+    {
+      "unicode": "1f58a",
+      "file": "1f58a.png"
+    },
+    {
+      "unicode": "2702",
+      "file": "2702.png"
+    },
+    {
+      "unicode": "1f50e",
+      "file": "1f50e.png"
+    },
+    {
+      "unicode": "231b",
+      "file": "231b.png"
+    },
+    {
+      "unicode": "1f1ec_1f1ed",
+      "file": "1f1ec_1f1ed.png"
+    },
+    {
+      "unicode": "1f1f3_1f1ec",
+      "file": "1f1f3_1f1ec.png"
+    },
+    {
+      "unicode": "1f1fa_1f1f8",
+      "file": "1f1fa_1f1f8.png"
+    },
+    {
+      "unicode": "1f1ec_1f1e7",
+      "file": "1f1ec_1f1e7.png"
+    },
+    {
+      "unicode": "1f1e9_1f1ea",
+      "file": "1f1e9_1f1ea.png"
+    },
+    {
+      "unicode": "1f1eb_1f1f7",
+      "file": "1f1eb_1f1f7.png"
+    },
+    {
+      "unicode": "1f1e8_1f1f3",
+      "file": "1f1e8_1f1f3.png"
+    },
+    {
+      "unicode": "1f1ef_1f1f5",
+      "file": "1f1ef_1f1f5.png"
+    },
+    {
+      "unicode": "1f1ea_1f1f8",
+      "file": "1f1ea_1f1f8.png"
+    },
+    {
+      "unicode": "1f1e7_1f1f7",
+      "file": "1f1e7_1f1f7.png"
+    },
+    {
+      "unicode": "1f6ab",
+      "file": "1f6ab.png"
+    },
+    {
+      "unicode": "26a0",
+      "file": "26a0.png"
+    },
+    {
+      "unicode": "267b",
+      "file": "267b.png"
+    },
+    {
+      "unicode": "274c",
+      "file": "274c.png"
+    },
+    {
+      "unicode": "2705",
+      "file": "2705.png"
+    },
+    {
+      "unicode": "274e",
+      "file": "274e.png"
+    }
+  ]
+}

@@ -31,13 +31,18 @@ class Prefs(context: Context) {
     val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
     val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
     val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 58)
-    val emojiStyle: String get() = if (sp.getString(EMOJI_STYLE, "gemoji") == "system") "system" else "gemoji"
+    val emojiStyle: String get() = "aura"
 
     init {
-        // Imported emoji fonts are no longer supported: switch older installs to Gemoji and delete the copy.
+        // Voice models are now downloaded on demand: delete the copy the old built-in model left behind.
+        if (!sp.getBoolean("voice_download_v1", false)) {
+            java.io.File(context.noBackupFilesDir, "embedded-speech").deleteRecursively()
+            sp.edit().putBoolean("voice_download_v1", true).apply()
+        }
+        // Emoji fonts are no longer used: delete any imported copy left by older versions.
         if (!sp.getBoolean("gemoji_v1", false)) {
             java.io.File(context.filesDir, "custom_emoji.ttf").delete()
-            sp.edit().putString(EMOJI_STYLE, "gemoji").remove("emoji_font_stamp").putBoolean("gemoji_v1", true).apply()
+            sp.edit().remove(EMOJI_STYLE).remove("emoji_font_stamp").putBoolean("gemoji_v1", true).apply()
         }
         // Retire provider credentials and model preferences on upgrade; typing stays local.
         if (!sp.getBoolean("offline_keyboard_v1", false)) {
@@ -48,7 +53,7 @@ class Prefs(context: Context) {
             java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "models").deleteRecursively()
             val edit = sp.edit()
             sp.all.keys.filter { it.startsWith("ai_") || it in setOf("voice_typing", "mic_consent", "offline_dictation", "rambler_rewrite", "speech_model", "rewrite_model", "models_wifi_only") }.forEach { edit.remove(it) }
-            edit.putString(KEY_STYLE, "glass").putInt(KEY_RADIUS, 12).putString(EMOJI_STYLE, "gemoji")
+            edit.putString(KEY_STYLE, "glass").putInt(KEY_RADIUS, 12)
                 .putBoolean("offline_keyboard_v1", true).apply()
         }
     }

@@ -81,6 +81,7 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
         push(mainPage(), animate = false)
+        if (intent?.getStringExtra("open") == "voice_model") voiceModelsPage()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -159,6 +160,71 @@ class SettingsActivity : AppCompatActivity() {
         return col
     }
 
+    /** Lists the downloadable voice models with live download progress. */
+    private fun voiceModelsPage() {
+        val models = com.gr4nt.iboard.voice.SpeechModels
+        lateinit var page: View
+        var alive = true
+        fun build(): View = subPage("Voice Model") {
+            section(footer = "Models are downloaded from Hugging Face (whisper.cpp) using Android's download manager. After that, dictation needs no connection. Only the model is downloaded; nothing you say or type is uploaded.") {
+                val selected = models.selectedId(this@SettingsActivity)
+                models.all.forEach { m ->
+                    val state = models.state(this@SettingsActivity, m)
+                    val value = when (state) {
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> if (m.id == selected) "In use ✓" else "Use"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Downloading -> "${state.percent}%"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Verifying -> "Checking…"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Failed -> "Retry"
+                        else -> "Get · ${m.approxMb} MB"
+                    }
+                    navRow(Icons.Kind.MIC, if (state is com.gr4nt.iboard.voice.SpeechModels.State.Installed) green else gray,
+                        m.title, value, subtitle = (state as? com.gr4nt.iboard.voice.SpeechModels.State.Failed)?.reason ?: m.detail) {
+                        when (state) {
+                            is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> AlertDialog.Builder(this@SettingsActivity)
+                                .setTitle("${m.title} voice model").setMessage("${m.detail}\n\nUse it for dictation, or delete it to free about ${m.approxMb} MB.")
+                                .setPositiveButton("Use") { _, _ -> models.select(this@SettingsActivity, m); refreshVoice() }
+                                .setNeutralButton("Delete") { _, _ -> models.delete(this@SettingsActivity, m); refreshVoice() }
+                                .setNegativeButton("Cancel", null).show()
+                            is com.gr4nt.iboard.voice.SpeechModels.State.Downloading, is com.gr4nt.iboard.voice.SpeechModels.State.Verifying ->
+                                AlertDialog.Builder(this@SettingsActivity).setTitle("Downloading ${m.title}")
+                                    .setMessage("You can leave this screen; the download continues in the background.")
+                                    .setPositiveButton("OK", null)
+                                    .setNegativeButton("Stop Download") { _, _ -> models.cancel(this@SettingsActivity, m); refreshVoice() }.show()
+                            else -> AlertDialog.Builder(this@SettingsActivity).setTitle("Download ${m.title} model?")
+                                .setMessage("${m.detail}\n\nAbout ${m.approxMb} MB. Wi-Fi is recommended.")
+                                .setPositiveButton("Download") { _, _ ->
+                                    runCatching { models.start(this@SettingsActivity, m) }
+                                        .onFailure { toast("Couldn't start the download") }
+                                    refreshVoice()
+                                }
+                                .setNegativeButton("Cancel", null).show()
+                        }
+                    }
+                }
+            }
+        }
+        refreshVoice = {
+            if (alive && stack.lastOrNull() === page) {
+                val fresh = build()
+                container.removeView(page); container.addView(fresh); stack[stack.lastIndex] = fresh; page = fresh
+            }
+        }
+        page = build()
+        push(page)
+        lifecycleScope.launch {
+            while (alive) {
+                kotlinx.coroutines.delay(1000)
+                if (!stack.contains(page)) { alive = false; break }
+                val busy = models.all.any { models.state(this@SettingsActivity, it).let { s -> s is com.gr4nt.iboard.voice.SpeechModels.State.Downloading || s is com.gr4nt.iboard.voice.SpeechModels.State.Verifying } }
+                if (busy) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { models.all.forEach { models.finishIfDone(this@SettingsActivity, it) } }
+                    refreshVoice()
+                }
+            }
+        }
+    }
+    private var refreshVoice: () -> Unit = {}
+
     private fun choicePage(title: String, entries: List<String>, values: List<String>, key: String, def: String, footer: String? = null) {
         lateinit var page: View
         fun build(): View = subPage(title) {
@@ -230,9 +296,12 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Offline intelligence", "Both modules are built in. No internet connection, account or model download is needed.") {
-            switchRow(Icons.Kind.MIC, blue, "Offline Dictation", sp.getBoolean("voice_typing", true),
-                subtitle = "Whisper Base · 6 keyboard languages") { putBool("voice_typing", it) }
+        val activeModel = com.gr4nt.iboard.voice.SpeechModels.active(this)
+        l.section("Voice typing & prediction", "Voice models are downloaded once, then dictation works offline. Your voice never leaves this phone.") {
+            switchRow(Icons.Kind.MIC, blue, "Dictation", sp.getBoolean("voice_typing", true),
+                subtitle = "Whisper · 6 keyboard languages") { putBool("voice_typing", it) }
+            navRow(Icons.Kind.MIC, orange, "Voice Model", activeModel?.title ?: "Not downloaded",
+                subtitle = "Download or change the speech model") { voiceModelsPage() }
             navRow(Icons.Kind.MIC, teal, "Microphone Access",
                 if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) "Allowed" else "Off",
                 subtitle = "Tap the mic beside the globe to start") {
@@ -248,11 +317,12 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        val emoE = listOf("Gemoji (3D)", "Phone's Emoji"); val emoV = listOf("gemoji", "system")
-        l.section("Emoji", "Gemoji is iBoard's own 3D emoji set, built into the app. Anything it doesn't cover uses your phone's emoji.") {
-            navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {
-                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "gemoji",
-                    "Gemoji is included in the app and works offline. Phone's Emoji uses the font that came with your phone.")
+        l.section("Emoji", "AURA Realistic 3D is the only emoji artwork. No font import or style selection.") {
+            navRow(Icons.Kind.SMILEY, yellow, "AURA Emoji", "Built-in 3D collection") {
+                AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("AURA Emoji")
+                    .setMessage("AURA is built into iBoard. The emoji picker displays only the bundled AURA designs.")
+                    .setPositiveButton("Done", null).show()
             }
         }
 
@@ -298,8 +368,8 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. No internet permission. The microphone is used only when you start dictation.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Offline privacy").setMessage("iBoard has no internet permission. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
+        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used only to download a voice model you choose. The microphone is used only when you start dictation.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet only to download a voice model you choose (from Hugging Face). Nothing you type or say is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
@@ -315,7 +385,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: Gemoji (adapted from Twemoji, CC BY 4.0)"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Realistic 3D"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER
@@ -444,6 +514,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getStringExtra("open") == "voice_model" && stack.size == 1) voiceModelsPage()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

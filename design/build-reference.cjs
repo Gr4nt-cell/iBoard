@@ -2,7 +2,7 @@ const fs=require('fs');
 const layouts=JSON.parse(fs.readFileSync('design/layouts.json','utf8'));
 const themes={light:{background:'#F8F5FC',surface:'#FFFFFF',ink:'#1C2033',muted:'#666C83',accent:'#007AFF',rim:'#FFFFFF',glow1:'#ECD2EA',glow2:'#D2DCF3'},dark:{background:'#141A2E',surface:'#DDE8FF',ink:'#FFFFFF',muted:'#B4BED3',accent:'#0A84FF',rim:'#DAE8FF',glow1:'#2B1E3A',glow2:'#141A2E'}};
 const icons=Object.fromEntries(fs.readdirSync('design/icons').filter(n=>n.endsWith('.svg')).map(n=>[n.slice(0,-4),fs.readFileSync('design/icons/'+n,'utf8')]));
-const emoji=Object.fromEntries(fs.readdirSync('design/emoji').filter(n=>n.endsWith('.png')).map(n=>[n.slice(0,-4),fs.readFileSync('design/emoji/'+n).toString('base64')]));
+const emoji=!fs.existsSync('design/emoji')?{}:Object.fromEntries(fs.readdirSync('design/emoji').filter(n=>n.endsWith('.png')).map(n=>[n.slice(0,-4),fs.readFileSync('design/emoji/'+n).toString('base64')]));
 const scene={name:'iBoard / Offline Liquid Glass',w:2048,h:1810,children:[]};
 const box=(p,name,x,y,w,h,fill,r=0,alpha=1)=>{const n={name,x,y,w,h,fill,r,alpha,children:[]};p.children.push(n);return n;};
 const label=(p,value,x,y,size=14,color='ink',w=300,align='LEFT',weight='Regular')=>{const n={kind:'text',name:value,value,x,y,w,h:size*1.35,size,color,align,weight};p.children.push(n);return n;};

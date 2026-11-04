@@ -114,14 +114,15 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val language = lang
         val queue = kotlinx.coroutines.channels.Channel<FloatArray>(3)
         voiceQueue = queue
-        voiceMessage("Preparing bundled speech model…")
+        voiceMessage("Preparing voice model…")
         voiceJob = scope.launch {
             var model: com.gr4nt.iboard.voice.WhisperLib.Model? = null
             try {
                 withContext(Dispatchers.IO) {
-                    val file = com.gr4nt.iboard.voice.EmbeddedSpeech.model(this@IBoardService)
-                    model = com.gr4nt.iboard.voice.WhisperLib.load(file.path)
-                        ?: error("Offline speech is unavailable on this device")
+                    val chosen = com.gr4nt.iboard.voice.SpeechModels.active(this@IBoardService, install = true)
+                        ?: throw NoVoiceModel()
+                    model = com.gr4nt.iboard.voice.WhisperLib.load(com.gr4nt.iboard.voice.SpeechModels.file(this@IBoardService, chosen).path)
+                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings › Voice Model.")
                 }
                 val loaded = model ?: error("Unable to load offline speech")
                 voiceModel = loaded
@@ -171,6 +172,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 if (!committed && session == voiceSession) toast("No speech recognized. Please try again closer to the microphone.")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
+            } catch (e: NoVoiceModel) {
+                if (session == voiceSession) {
+                    toast("Download a voice model first: Settings › Voice Model")
+                    runCatching {
+                        startActivity(Intent(this@IBoardService, com.gr4nt.iboard.settings.SettingsActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("open", "voice_model"))
+                    }
+                }
             } catch (e: Exception) {
                 if (session == voiceSession) toast(e.message ?: "Offline dictation failed")
             } finally {
@@ -861,3 +870,5 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
     }
 }
+
+private class NoVoiceModel : Exception("No voice model downloaded")

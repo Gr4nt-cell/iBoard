@@ -1,7 +1,6 @@
 package com.gr4nt.iboard.emoji
 
 import android.content.Context
-import android.graphics.Paint
 
 data class Emoji(val text: String, val skin: Boolean, val name: String)
 
@@ -15,7 +14,6 @@ object EmojiData {
 
     @Volatile
     private var cached: List<List<Emoji>>? = null
-    private val paint = Paint()
 
     /** Categories 1..8 (index 0 here is "Smileys & People"). Call off the main thread. */
     fun categories(context: Context): List<List<Emoji>> {
@@ -73,12 +71,6 @@ object EmojiData {
         return scored.sortedBy { it.second }.map { it.first }.distinct().take(limit)
     }
 
-    fun setTypeface(tf: android.graphics.Typeface?) {
-        paint.typeface = tf
-        cached = null
-    }
-
-    fun canDraw(s: String): Boolean = try { paint.hasGlyph(s) } catch (_: Exception) { true }
 
     /** Applies a Fitzpatrick skin tone to an emoji that supports it. */
     fun withTone(e: String, tone: String?): String {
