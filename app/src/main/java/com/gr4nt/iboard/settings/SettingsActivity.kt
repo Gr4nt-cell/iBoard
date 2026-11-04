@@ -321,7 +321,7 @@ class SettingsActivity : AppCompatActivity() {
             navRow(Icons.Kind.SMILEY, yellow, "Personal Emoji", "Built in") {
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle("iBoard Personal Emoji")
-                    .setMessage("Personal build: your own emoji font restyled to the AURA look, with AURA artwork where available. Not for distribution or Google Play.")
+                    .setMessage("Personal build: your own emoji font restyled in the AURA style. Not for distribution or Google Play.")
                     .setPositiveButton("Done", null).show()
             }
         }
