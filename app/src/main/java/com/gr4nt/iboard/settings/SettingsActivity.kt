@@ -121,30 +121,6 @@ class SettingsActivity : AppCompatActivity() {
 
     private var mainScroll = 0
 
-    /** Copies a font the user picks into private storage and switches the emoji style to it. */
-    private val pickFont = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@registerForActivityResult
-        lifecycleScope.launch {
-            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val dest = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this@SettingsActivity)
-                    val tmp = java.io.File(dest.path + ".tmp")
-                    contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
-                    // Make sure Android can actually load it before switching over.
-                    android.graphics.Typeface.createFromFile(tmp)
-                    tmp.renameTo(dest)
-                } catch (_: Exception) {
-                    false
-                }
-            }
-            if (ok) {
-                sp.edit().putString(Prefs.EMOJI_STYLE, "custom").putLong("emoji_font_stamp", System.currentTimeMillis()).apply()
-                toast("Emoji font imported")
-            } else toast("That file isn't a font Android can use")
-            refreshMain()
-        }
-    }
-
     private fun scroll(content: View) = ScrollView(this).apply {
         isFillViewport = true
         background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this@SettingsActivity, prefs).gradient)
@@ -272,22 +248,11 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        val hasCustom = com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this).exists()
-        val emoE = mutableListOf("Phone's Emoji (Built-in)"); val emoV = mutableListOf("bundled")
-        if (hasCustom) { emoE += "Imported Font"; emoV += "custom" }
-        l.section("Emoji", "An iOS-style emoji font is built in. No extra emoji download is needed. You can import a different font entirely offline.") {
+        val emoE = listOf("Gemoji (3D)", "Phone's Emoji"); val emoV = listOf("gemoji", "system")
+        l.section("Emoji", "Gemoji is iBoard's own 3D emoji set, built into the app. Anything it doesn't cover uses your phone's emoji.") {
             navRow(Icons.Kind.SMILEY, yellow, "Emoji Style", label(emoE, emoV, prefs.emojiStyle)) {
-                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "bundled",
-                    "The built-in font is included in the app. Imported Font uses the .ttf you picked.")
-            }
-            actionRow(if (hasCustom) "Replace Emoji Font…" else "Import Emoji Font…", p.blue, Icons.Kind.TEXT_AA, orange) {
-                pickFont.launch(arrayOf("*/*"))
-            }
-            if (hasCustom) actionRow("Remove Imported Font", p.red) {
-                com.gr4nt.iboard.emoji.EmojiImages.customFontFile(this@SettingsActivity).delete()
-                if (prefs.emojiStyle == "custom") sp.edit().putString(Prefs.EMOJI_STYLE, "bundled").apply()
-                toast("Imported font removed")
-                refreshMain()
+                choicePage("Emoji Style", emoE, emoV, Prefs.EMOJI_STYLE, "gemoji",
+                    "Gemoji is included in the app and works offline. Phone's Emoji uses the font that came with your phone.")
             }
         }
 
@@ -350,7 +315,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: bundled font"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: Gemoji (adapted from Twemoji, CC BY 4.0)"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER
