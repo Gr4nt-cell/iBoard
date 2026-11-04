@@ -317,11 +317,11 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Emoji", "AURA Realistic 3D is the only emoji artwork. No font import or style selection.") {
-            navRow(Icons.Kind.SMILEY, yellow, "AURA Emoji", "Built-in 3D collection") {
+        l.section("Emoji", "Lumo Emoji is iBoard's own 3D emoji set and is built into the app.") {
+            navRow(Icons.Kind.SMILEY, yellow, "Lumo Emoji", "Built in") {
                 AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("AURA Emoji")
-                    .setMessage("AURA is built into iBoard. The emoji picker displays only the bundled AURA designs.")
+                    .setTitle("Lumo Emoji")
+                    .setMessage("Every Unicode emoji, including skin tones, families and flags, drawn in iBoard's 3D style. It is built into the keyboard and works offline.\n\nIncludes iBoard AURA artwork. Other artwork adapted from Twemoji (CC BY 4.0).")
                     .setPositiveButton("Done", null).show()
             }
         }
@@ -385,7 +385,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Realistic 3D"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: Lumo (AURA art + Twemoji, CC BY 4.0)"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER

@@ -25,7 +25,7 @@ import java.util.concurrent.Executors
 
 /**
  * iOS-style emoji keyboard: "Search Emoji" field, horizontally paged grid with section titles,
- * category bar with ABC and delete, long-press skin tones. Emoji are drawn with the bundled AURA artwork.
+ * category bar with ABC and delete, long-press skin tones. Emoji are drawn with the bundled Lumo Emoji font.
  */
 @SuppressLint("ViewConstructor")
 class EmojiPanel(

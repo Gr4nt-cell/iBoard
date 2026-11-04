@@ -31,7 +31,7 @@ class Prefs(context: Context) {
     val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
     val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
     val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 58)
-    val emojiStyle: String get() = "aura"
+    val emojiStyle: String get() = "lumo"
 
     init {
         // Voice models are now downloaded on demand: delete the copy the old built-in model left behind.
