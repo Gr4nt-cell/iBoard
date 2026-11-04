@@ -4,7 +4,7 @@ import android.content.Context
 
 data class Emoji(val text: String, val skin: Boolean, val name: String)
 
-/** Emoji grouped into iOS's categories, filtered to what this phone's emoji font can draw. */
+/** Emoji grouped into categories and filtered to sequences in the bundled AURA font. */
 object EmojiData {
     val CATEGORY_NAMES = listOf(
         "FREQUENTLY USED", "SMILEYS & PEOPLE", "ANIMALS & NATURE", "FOOD & DRINK",

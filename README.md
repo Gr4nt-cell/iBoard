@@ -24,9 +24,9 @@ Settings shares the keyboard background hues, translucent glass cards, rim highl
 
 ## Emoji
 
-`assets/fonts/ios-style.ttf` is the user-supplied `NotoColorEmoji.ttf`, identifying itself as Apple MFFM Color Emoji. Its bytes are unchanged. Coverage checks found all 3,564 tested emoji sequences supported, including skin tones and flags. The old Fluent 3D artwork and its generator have been removed. No emoji download is needed. An optional local font importer remains available.
+`assets/fonts/aura-emoji.ttf` is the restyled color font made from the supplied `SamsungColorEmoji` font. Its embedded family is **AURA Emoji**. The restyling adds richer color, glossy highlights and soft depth while preserving the source glyphs. The font contains 4,462 color glyph images; coverage checks confirm 3,549 of 3,564 tested picker sequences. Unsupported sequences are hidden rather than drawn using Android's fallback emoji font. Font importing and style selection have been removed.
 
-The font controls rendering inside iBoard. The keyboard commits ordinary Unicode emoji; receiving apps use their own emoji rendering. Font provenance and embedded notices are recorded in `assets/fonts/FONT-NOTICE.md`.
+The bundled font controls emoji rendering inside iBoard. The keyboard commits ordinary Unicode emoji; receiving apps use their own emoji rendering. Font provenance and the embedded license are recorded in `assets/fonts/FONT-NOTICE.md`.
 
 ## Offline privacy
 

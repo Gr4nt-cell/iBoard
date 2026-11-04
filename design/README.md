@@ -12,9 +12,8 @@ Figma canvas editing is blocked by the account's Collab-seat call limit. The
 canvas has not been updated. Run the Figma Scripter plugin in the file and paste
 `figma-liquid-glass.js` to import editable layers. A repeated run creates a new
 page. The script contains ten screens, 26 shared components, eight color
-variables with Light/Dark modes, Roboto labels and vector icons. The 40 small
-emoji preview images are individual supplied-font glyphs, not flattened UI.
-The app renders the original supplied font directly.
+variables with Light/Dark modes, Roboto labels and vector icons. Emoji in the
+keyboard preview are rendered from the bundled, restyled AURA color font.
 
 Regenerate with `python3 scripts/check-offline-keyboard.py`, then
 `node design/build-reference.cjs`. `node design/check-import.cjs` checks the

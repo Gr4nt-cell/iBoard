@@ -317,11 +317,11 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Emoji", "AURA Realistic 3D is the only emoji artwork. No font import or style selection.") {
-            navRow(Icons.Kind.SMILEY, yellow, "AURA Emoji", "Built-in 3D collection") {
+        l.section("Emoji", "The keyboard uses the bundled AURA color font. Unsupported sequences are hidden; Android emoji fallback and font importing are disabled.") {
+            navRow(Icons.Kind.SMILEY, yellow, "AURA Emoji", "Bundled restyled color font") {
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle("AURA Emoji")
-                    .setMessage("AURA is built into iBoard. The emoji picker displays only the bundled AURA designs.")
+                    .setMessage("AURA Emoji is the restyled color font supplied with iBoard. Unsupported emoji sequences are not drawn with Android's system emoji font.")
                     .setPositiveButton("Done", null).show()
             }
         }
@@ -385,7 +385,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Realistic 3D"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Emoji"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER

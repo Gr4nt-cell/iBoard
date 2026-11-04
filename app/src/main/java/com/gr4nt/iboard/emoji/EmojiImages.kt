@@ -1,62 +1,47 @@
 package com.gr4nt.iboard.emoji
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
-import android.util.LruCache
+import android.graphics.Typeface
 
-/** Renders exclusively the AURA artwork bundled with iBoard. */
+/** Renders only sequences verified in the bundled, restyled AURA color font. */
 object EmojiImages {
     const val AURA = "aura"
-    /** Emoji are never drawn larger than this on a keyboard, so bigger source art is scaled down on load. */
-    private const val MAX_PX = 192
-    private val cache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
-    }
-    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val dst = RectF()
-    @Volatile private var available: Set<String>? = null
+    @Volatile private var auraTypeface: Typeface? = null
+    @Volatile private var supported: Set<String> = emptySet()
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
+    /** Keep the existing call shape while there is only one installed emoji style. */
     fun configure(context: Context, style: String) { init(context) }
+
     fun init(context: Context) {
-        if (available == null) synchronized(this) {
-            if (available == null) available = context.applicationContext.assets.list("aura")
-                ?.filter { it.endsWith(".png") }?.toSet() ?: emptySet()
+        if (auraTypeface != null && supported.isNotEmpty()) return
+        synchronized(this) {
+            if (auraTypeface == null || supported.isEmpty()) {
+                val appContext = context.applicationContext
+                val font = Typeface.createFromAsset(appContext.assets, "fonts/aura-emoji.ttf")
+                val covered = appContext.assets.open("fonts/supported_emoji.txt")
+                    .bufferedReader(Charsets.UTF_8).useLines { lines ->
+                        lines.map(String::trim).filter(String::isNotEmpty).toSet()
+                    }
+                auraTypeface = font
+                supported = covered
+                paint.typeface = font
+            }
         }
     }
+
     fun key(emoji: String): String = emoji.codePoints().toArray()
         .filter { it != 0xFE0F }.joinToString("_") { Integer.toHexString(it) }
-    fun has(emoji: String): Boolean = (key(emoji) + ".png") in (available ?: emptySet())
-
-    private fun load(context: Context, filename: String): Bitmap? = runCatching {
-        val assets = context.applicationContext.assets
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        assets.open("aura/$filename").use { BitmapFactory.decodeStream(it, null, bounds) }
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_PX) sample *= 2
-        val decoded = assets.open("aura/$filename").use {
-            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-        } ?: return@runCatching null
-        val big = maxOf(decoded.width, decoded.height)
-        if (big <= MAX_PX) decoded else {
-            val s = MAX_PX.toFloat() / big
-            Bitmap.createScaledBitmap(decoded, (decoded.width * s).toInt(), (decoded.height * s).toInt(), true)
-                .also { if (it !== decoded) decoded.recycle() }
-        }
-    }.getOrNull()
+    fun has(emoji: String): Boolean = key(emoji) in supported
 
     fun draw(context: Context, canvas: Canvas, emoji: String, cx: Float, cy: Float, size: Float) {
         init(context)
-        val filename = key(emoji) + ".png"
-        if (filename !in (available ?: emptySet())) return
-        val bitmap = synchronized(cache) {
-            cache.get(filename) ?: load(context, filename)?.also { cache.put(filename, it) }
-        } ?: return
-        val half = size * 0.55f
-        dst.set(cx - half, cy - half, cx + half, cy + half)
-        canvas.drawBitmap(bitmap, null, dst, bitmapPaint)
+        // Skip missing sequences rather than drawing them with Android's system emoji font.
+        if (!has(emoji)) return
+        paint.typeface = auraTypeface ?: return
+        paint.textSize = size * 0.9f
+        canvas.drawText(emoji, cx, cy - (paint.descent() + paint.ascent()) / 2f, paint)
     }
 }

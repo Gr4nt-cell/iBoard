@@ -46,7 +46,7 @@ const settingsSections=[
  ['Appearance','Automatic','nav'],['Background','Blossom','nav'],['Background Opacity','58%','slider'],['Key Style','Liquid Glass','nav'],['Return Key Color','Blue','nav']]],
  ['Offline intelligence',[
  ['Offline Dictation','Whisper Base · 6 languages','switch','mic'],['Microphone Access','Off · Tap the mic beside the globe','nav','mic'],['Word Prediction','On-device · Trained context model','nav','settings']]],
- ['Emoji', [['Emoji Style','iOS-style (Built-in)','nav','emoji'],['Import Emoji Font…','Import a local .ttf file','nav','emoji']]],
+ ['Emoji', [['AURA Emoji','Bundled restyled color font · no import or fallback','nav','emoji']]],
  ['Keys', [['Key Height','100%','slider'],['Letter Size','100%','slider'],['Corner Roundness','12','slider'],['Uppercase Labels','','switch'],['Number Row','','switch'],['Character Preview','','switch'],['Label on Space Bar','','switch']]],
  ['Icon Capsule', [['Icon Capsule','','switch'],['Buttons on Suggestion Bar','','switch']]],
  ['Typing', [['Auto-Capitalization','','switch'],['Auto-Correction','','switch'],['“.” Shortcut','','switch'],['Learn My Words','Personal vocabulary stays on this phone','switch'],['Haptic Feedback','','switch'],['Key Sounds','','switch'],['Reset Learned Words','','nav']]],

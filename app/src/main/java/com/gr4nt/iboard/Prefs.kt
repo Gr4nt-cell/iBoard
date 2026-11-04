@@ -39,7 +39,7 @@ class Prefs(context: Context) {
             java.io.File(context.noBackupFilesDir, "embedded-speech").deleteRecursively()
             sp.edit().putBoolean("voice_download_v1", true).apply()
         }
-        // Emoji fonts are no longer used: delete any imported copy left by older versions.
+        // Remove custom imports from older versions; the bundled AURA font is the only renderer.
         if (!sp.getBoolean("gemoji_v1", false)) {
             java.io.File(context.filesDir, "custom_emoji.ttf").delete()
             sp.edit().remove(EMOJI_STYLE).remove("emoji_font_stamp").putBoolean("gemoji_v1", true).apply()

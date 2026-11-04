@@ -71,7 +71,7 @@ android {
         buildConfig = true
     }
     androidResources {
-        noCompress += listOf("txt", "tsv", "bin")
+        noCompress += listOf("txt", "tsv")
     }
 }
 
