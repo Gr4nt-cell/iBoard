@@ -385,7 +385,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Emoji"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Emoji (incl. Microsoft Fluent Emoji, MIT; Twemoji, CC BY 4.0)"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER

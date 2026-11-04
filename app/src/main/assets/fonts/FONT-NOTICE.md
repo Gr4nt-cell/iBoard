@@ -1,10 +1,20 @@
 # AURA Emoji font notice
 
-Source: the user-supplied SamsungColorEmoji_1793823079127.ttf color bitmap font.
-Bundled asset: `aura-emoji.ttf` (rebranded and restyled from the supplied file).
-Embedded glyphs: the 4,462 CBDT color glyph PNGs receive enhanced saturation/contrast, a soft offset shadow, a glossy top highlight, and a subtle lower-edge shade; the images are palette-optimized to 64 colors to control package size.
-Font family and PostScript names: `AURA Emoji` / `AURAEmoji`.
+`aura-emoji.ttf` (family "AURA Emoji") is iBoard's bundled colour emoji font, built for the app.
 
-The source font identifies Google Inc. as copyright holder and identifies its artwork as Noto Color Emoji. That attribution is retained. The source Noto Color Emoji artwork is distributed under the SIL Open Font License, Version 1.1 (OFL-1.1); the license is also embedded in the renamed font metadata. The OFL grants permission to modify and distribute the font, subject to its terms. See `https://openfontlicense.org` and the font's embedded license record.
+Sources:
+- **Most-used emoji**: generated for iBoard with Figma AI in the AURA style (one image per emoji).
+- **Most other emoji, including skin tones**: Microsoft Fluent Emoji 3D,
+  Copyright (c) Microsoft Corporation, MIT License (https://github.com/microsoft/fluentui-emoji),
+  colour-graded and re-lit to match the AURA style.
+- **Remaining glyphs (mainly flags and mixed-skin-tone groups)**: adapted from Twemoji,
+  Copyright 2020 Twitter, Inc and other contributors, CC BY 4.0 (https://github.com/jdecked/twemoji),
+  with 3D shading.
 
-This project is not affiliated with Google, Samsung, or Apple. The AURA name describes this app's restyled build only.
+Font tables built with Noto Emoji's build tools (Apache License 2.0).
+The build pipeline is in `design/aura-emoji/`.
+
+MIT License (Fluent Emoji): Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files, to deal in the Software without restriction,
+subject to including the copyright notice above and this permission notice in all copies or
+substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
