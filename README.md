@@ -24,7 +24,7 @@ Settings shares the keyboard background hues, translucent glass cards, rim highl
 
 ## Emoji
 
-`assets/fonts/aura-emoji.ttf` (**AURA Emoji**) is iBoard's own colour emoji font. Every emoji is generated for iBoard with Figma AI in the AURA style; the set is growing in batches of 100 (currently the 100 most-used emoji). Emoji not yet in the font are hidden from the picker. Font importing and style selection have been removed.
+`assets/fonts/aura-emoji.ttf` (**AURA Emoji**) is iBoard's own colour emoji font. Every emoji is generated for iBoard with Figma AI in the AURA style; the set is growing in batches of 100 (currently 200: smileys, hearts, hands, cat and monkey faces, popular animals and food). Emoji not yet in the font are hidden from the picker. Font importing and style selection have been removed.
 
 The bundled font controls emoji rendering inside iBoard. The keyboard commits ordinary Unicode emoji; receiving apps use their own emoji rendering. Font provenance and the embedded license are recorded in `assets/fonts/FONT-NOTICE.md`.
 
