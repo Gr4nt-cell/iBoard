@@ -528,9 +528,17 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
 
+    /** Types an emoji: as an AURA sticker where the app accepts images, otherwise as text. */
+    private fun commitEmoji(text: String) {
+        val ic = currentInputConnection ?: return
+        val asSticker = prefs.sp.getBoolean(com.gr4nt.iboard.emoji.EmojiSticker.PREF, true) &&
+            com.gr4nt.iboard.emoji.EmojiSticker.send(this, ic, currentInputEditorInfo, text)
+        if (!asSticker) ic.commitText(text, 1)
+    }
+
     override fun onEmojiResult(text: String) {
         feedback(KeyType.CHAR)
-        currentInputConnection?.commitText(text, 1)
+        commitEmoji(text)
         com.gr4nt.iboard.emoji.EmojiHistory(this).record(text)
     }
 
@@ -775,7 +783,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         closePanels()
         val panel = EmojiPanel(this, t, panelHeight(), object : EmojiPanel.Listener {
             override fun onEmoji(text: String) {
-                currentInputConnection?.commitText(text, 1)
+                commitEmoji(text)
                 spaceAutoInserted = false
             }
             override fun onBackspace(repeat: Int) = this@IBoardService.onBackspace(minOf(repeat, 10))

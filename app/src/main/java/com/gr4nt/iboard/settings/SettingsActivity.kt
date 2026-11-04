@@ -317,11 +317,13 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Emoji", "The keyboard uses the bundled AURA color font. Unsupported sequences are hidden; Android emoji fallback and font importing are disabled.") {
-            navRow(Icons.Kind.SMILEY, yellow, "AURA Emoji", "Bundled restyled color font") {
+        l.section("Emoji", "Apps draw typed emoji with your phone's own emoji font. With AURA Stickers on, apps that accept images from keyboards (WhatsApp, Telegram, Messages, Signal…) get the AURA emoji as a small sticker instead; other apps get a normal emoji.") {
+            switchRow(Icons.Kind.SMILEY, yellow, "Send as AURA Stickers", sp.getBoolean(com.gr4nt.iboard.emoji.EmojiSticker.PREF, true),
+                subtitle = "Keeps the AURA look where the app allows it") { putBool(com.gr4nt.iboard.emoji.EmojiSticker.PREF, it) }
+            navRow(Icons.Kind.SMILEY, orange, "AURA Emoji", "Built in") {
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle("AURA Emoji")
-                    .setMessage("AURA Emoji is the restyled color font supplied with iBoard. Unsupported emoji sequences are not drawn with Android's system emoji font.")
+                    .setMessage("iBoard's own emoji, generated in the AURA style. The picker shows the emoji drawn so far; more are added with each update.")
                     .setPositiveButton("Done", null).show()
             }
         }

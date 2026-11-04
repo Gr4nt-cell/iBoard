@@ -9,6 +9,8 @@ import android.graphics.Typeface
 object EmojiImages {
     const val AURA = "aura"
     @Volatile private var auraTypeface: Typeface? = null
+    /** The bundled AURA typeface, once [init] has run. */
+    val typeface: Typeface? get() = auraTypeface
     @Volatile private var supported: Set<String> = emptySet()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
