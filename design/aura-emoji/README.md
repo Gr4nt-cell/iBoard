@@ -1,6 +1,11 @@
 # AURA Emoji build
 
-1. `figma-source/<codepoints>.jpg`: AURA-style emoji generated one per image with Figma AI (256 px previews); `cut.py` removes the white background.
-2. Microsoft Fluent Emoji 3D (MIT) PNGs, including every skin tone, go through `grade.py` (`aura_grade`) to match the AURA look: S-curve contrast, richer saturation, darker mouths, edge depth, specular highlight and soft shadow.
-3. Glyphs neither source covers (flags, mixed-tone groups) come from Twemoji (CC BY 4.0), shaded by `restyle_lumo.js` / `render_lumo.js`.
-4. `build_main.sh` layers them (Figma > Fluent > Twemoji), palettises with `squant.js`, and builds the CBDT font with Noto Emoji's `add_glyphs.py` / `emoji_builder.py` and `aura.tmpl.ttx.tmpl`. `patch_figma.sh` swaps in new Figma batches.
+Every glyph is generated with Figma AI in the AURA style, one emoji per image.
+
+1. `figma-source/<codepoints>.jpg`: the generated images (256 px previews), named by Unicode code points.
+2. `cut.py` removes the plain background (white, or a contrasting colour for white subjects).
+3. `build_figma_only.sh` places each emoji on a 170×160 canvas, palettises it with `squant.js`
+   (libimagequant via sharp), and builds the CBDT font with Noto Emoji's `add_glyphs.py` /
+   `emoji_builder.py` and `aura_fo.tmpl.ttx.tmpl`. It also writes `supported_emoji.txt`.
+
+New batches are added by dropping more images into `figma-source/` and re-running the build.

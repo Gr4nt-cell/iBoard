@@ -5,7 +5,8 @@ src,dst=sys.argv[1],sys.argv[2];os.makedirs(dst,exist_ok=True)
 for f in sorted(glob.glob(src+'/*.jpg')):
     im=cv2.imread(f);h,w=im.shape[:2]
     lab=cv2.cvtColor(im,cv2.COLOR_BGR2LAB).astype(np.float32)
-    dist=np.sqrt((lab[...,0]-255)**2*0.4+(lab[...,1]-128)**2+(lab[...,2]-128)**2)
+    bord=np.concatenate([lab[0],lab[-1],lab[:,0],lab[:,-1]]);bgc=np.median(bord,axis=0)
+    dist=np.sqrt((lab[...,0]-bgc[0])**2*0.4+(lab[...,1]-bgc[1])**2+(lab[...,2]-bgc[2])**2)
     near=(dist<30).astype(np.uint8)
     # background = near-white region connected to the border
     mask=np.zeros((h+2,w+2),np.uint8);bg=near.copy()
