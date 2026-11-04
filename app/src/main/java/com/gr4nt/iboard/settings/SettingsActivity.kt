@@ -317,11 +317,11 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Emoji", "Lumo Emoji is iBoard's own 3D emoji set and is built into the app.") {
-            navRow(Icons.Kind.SMILEY, yellow, "Lumo Emoji", "Built in") {
+        l.section("Emoji", "Personal build with iBoard Personal Emoji. For use on your own phone only.") {
+            navRow(Icons.Kind.SMILEY, yellow, "Personal Emoji", "Built in") {
                 AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("Lumo Emoji")
-                    .setMessage("Every Unicode emoji, including skin tones, families and flags, drawn in iBoard's 3D style. It is built into the keyboard and works offline.\n\nIncludes iBoard AURA artwork. Other artwork adapted from Twemoji (CC BY 4.0).")
+                    .setTitle("iBoard Personal Emoji")
+                    .setMessage("Personal build: your own emoji font restyled to the AURA look, with AURA artwork where available. Not for distribution or Google Play.")
                     .setPositiveButton("Done", null).show()
             }
         }
@@ -385,7 +385,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: Lumo (AURA art + Twemoji, CC BY 4.0)"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: iBoard Personal Emoji (personal build)"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER

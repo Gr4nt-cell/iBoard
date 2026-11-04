@@ -8,7 +8,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.gr4nt.iboard"
+        // Personal build: separate app ID so it installs beside (and can never replace) the Play app.
+        applicationId = "com.gr4nt.iboard.personal"
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }

@@ -6,7 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 
 /**
- * Draws emoji with Lumo Emoji, iBoard's bundled 3D color emoji font (assets/fonts/lumo.ttf).
+ * Personal build: draws emoji with iBoard Personal Emoji (assets/fonts/personal.ttf). Not for distribution.
  * Lumo covers the full Unicode emoji set, including skin tones, families and flags.
  */
 object EmojiImages {
@@ -23,7 +23,7 @@ object EmojiImages {
         if (configured) return
         synchronized(this) {
             if (configured) return
-            typeface = runCatching { Typeface.createFromAsset(context.applicationContext.assets, "fonts/lumo.ttf") }.getOrNull()
+            typeface = runCatching { Typeface.createFromAsset(context.applicationContext.assets, "fonts/personal.ttf") }.getOrNull()
             paint.typeface = typeface
             configured = true
         }

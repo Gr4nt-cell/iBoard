@@ -2,7 +2,7 @@ name: Build iBoard APK
 
 on:
   push:
-    branches: [main, gpt]
+    branches: [main, gpt, personal]
   workflow_dispatch:
 
 permissions:
@@ -86,6 +86,7 @@ jobs:
             export IBOARD_UNSIGNED=1
             NAME=iBoard-unsigned.aab
           fi
+          if [ "${{ github.ref }}" = "refs/heads/personal" ]; then echo "AAB_NAME=" >> "$GITHUB_ENV"; exit 0; fi
           gradle :app:bundleRelease --stacktrace
           cp app/build/outputs/bundle/release/app-release.aab "$NAME"
           echo "AAB_NAME=$NAME" >> "$GITHUB_ENV"
@@ -106,4 +107,16 @@ jobs:
           gh release create latest iBoard.apk "$AAB_NAME" \
             --title "iBoard build #${{ github.run_number }}" \
             --notes "Automatic build from ${{ github.sha }}. Download iBoard.apk below and install it on your Android phone." \
+            --prerelease --target "${{ github.sha }}"
+
+      - name: Publish "personal" release (personal branch, APK only)
+        if: github.ref == 'refs/heads/personal'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp iBoard.apk iBoard-personal.apk
+          gh release delete personal --yes --cleanup-tag || true
+          gh release create personal iBoard-personal.apk \
+            --title "iBoard Personal build #${{ github.run_number }}" \
+            --notes "Personal sideload build from ${{ github.sha }} (app ID com.gr4nt.iboard.personal). Not for Google Play or distribution." \
             --prerelease --target "${{ github.sha }}"
