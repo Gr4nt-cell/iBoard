@@ -29,9 +29,11 @@ android {
         System.getenv("UPLOAD_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { path ->
             create("upload") {
                 storeFile = file(path)
-                storePassword = System.getenv("UPLOAD_STORE_PASSWORD")
-                keyAlias = System.getenv("UPLOAD_KEY_ALIAS") ?: "upload"
-                keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+                // Missing secrets arrive as empty strings, so fall back to sensible defaults.
+                val storePass = System.getenv("UPLOAD_STORE_PASSWORD")?.trim().orEmpty()
+                storePassword = storePass
+                keyAlias = System.getenv("UPLOAD_KEY_ALIAS")?.trim()?.ifBlank { null } ?: "upload"
+                keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")?.trim()?.ifBlank { null } ?: storePass
             }
         }
     }

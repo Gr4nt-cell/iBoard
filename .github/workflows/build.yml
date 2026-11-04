@@ -29,10 +29,24 @@ jobs:
       - name: Prepare upload key (when the repository secrets are set)
         env:
           UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
-          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
-            echo "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          if [ -z "$UPLOAD_KEYSTORE_B64" ]; then echo "No upload key secrets: bundle will be unsigned."; exit 0; fi
+          ALIAS="$(echo -n "${UPLOAD_KEY_ALIAS:-upload}" | tr -d '[:space:]')"; ALIAS="${ALIAS:-upload}"
+          STORE_PW="$(echo -n "$UPLOAD_STORE_PASSWORD" | tr -d '\r\n')"
+          KEY_PW="$(echo -n "${UPLOAD_KEY_PASSWORD:-$STORE_PW}" | tr -d '\r\n')"; KEY_PW="${KEY_PW:-$STORE_PW}"
+          # Tolerate spaces or line breaks pasted into the secret.
+          echo -n "$UPLOAD_KEYSTORE_B64" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/upload.jks" || true
+          echo "Secret lengths: keystore=${#UPLOAD_KEYSTORE_B64} store_password=${#UPLOAD_STORE_PASSWORD} key_password=${#UPLOAD_KEY_PASSWORD} alias=${#UPLOAD_KEY_ALIAS}"
+          if keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$STORE_PW" -alias "$ALIAS" >/dev/null 2>&1; then
+            keytool -list -v -keystore "$RUNNER_TEMP/upload.jks" -storepass "$STORE_PW" -alias "$ALIAS" | grep -m1 "SHA256:" || true
             echo "UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+            echo "Upload key OK (alias $ALIAS)."
+          else
+            echo "::warning title=Upload key not usable::The UPLOAD_* secrets don't open the keystore (check UPLOAD_STORE_PASSWORD and UPLOAD_KEY_ALIAS). Building an unsigned bundle instead."
+            rm -f "$RUNNER_TEMP/upload.jks"
           fi
 
       - name: Build APK
