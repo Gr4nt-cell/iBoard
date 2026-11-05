@@ -24,7 +24,7 @@ for f in sorted(glob.glob(src+'/*.jpg')):
     for j in range(1,hn):
         if j in set(np.unique(np.concatenate([hl[0],hl[-1],hl[:,0],hl[:,-1]]))): continue
         hole=hl==j
-        if hs[j,4]<250 or np.median(dist[hole])>=30: fill[hole]=1
+        if hs[j,4]<float(os.environ.get("HOLEMAX","250")) or np.median(dist[hole])>=30: fill[hole]=1
     alpha=cv2.GaussianBlur(cv2.erode(fill,np.ones((3,3),np.uint8)).astype(np.float32),(0,0),0.9)
     # soften: semi-transparent where pixel is near-white at the rim (soft shadow / antialias)
     rim=(cv2.dilate(fill,np.ones((7,7),np.uint8))-cv2.erode(fill,np.ones((7,7),np.uint8)))>0
