@@ -31,3 +31,5 @@ import os
 keys=sorted('_'.join('%x'%int(c,16) for c in f[7:-4].split('_')) for f in os.listdir('fo_q') if f.startswith('emoji_u'))
 open('supported_emoji_fo.txt','w').write('\n'.join(keys)+'\n');print('supported',len(keys),'font',os.path.getsize('aura-emoji-fo.ttf'))
 PY
+
+python3 fix_vs.py aura-emoji-fo.ttf aura-emoji-fo.ttf emoji-test.txt
