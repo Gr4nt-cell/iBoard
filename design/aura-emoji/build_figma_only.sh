@@ -2,7 +2,7 @@ set -e
 cd "$(dirname "$0")"
 N=../src/noto-emoji
 export PYTHONPATH=$PWD/../src/nototools:$PWD/$N:$PWD/$N/third_party/color_emoji
-(cd ../figgen && rm -rf cut && python3 cut.py raw cut >/dev/null)
+: # cut images are kept in ../figgen/cut (batch 4 cut with oa/cut_holes.py)
 rm -rf fo_png fo_q && mkdir fo_png
 python3 - <<'PY'
 import glob,os
@@ -19,7 +19,7 @@ python3 - <<'PY'
 import re
 t=open('aura.tmpl.ttx.tmpl').read()
 t=re.sub(r'(<namerecord nameID="0"[^>]*>\s*)[^<]*?(\s*</namerecord>)',r'\1Copyright 2026 iBoard.\2',t,count=1)
-t=re.sub(r'(<namerecord nameID="13"[^>]*>\s*)[^<]*?(\s*</namerecord>)',r'\1AURA Emoji for iBoard. Every glyph generated for iBoard with Figma AI in the AURA style.\2',t,count=1)
+t=re.sub(r'(<namerecord nameID="13"[^>]*>\s*)[^<]*?(\s*</namerecord>)',r'\1AURA Emoji for iBoard. Every glyph generated for iBoard with AI (Figma AI, OpenArt Nano Banana 2) in the AURA style.\2',t,count=1)
 open('aura_fo.tmpl.ttx.tmpl','w').write(t)
 PY
 python3 $N/add_glyphs.py -f aura_fo.tmpl.ttx.tmpl -o aura_fo.tmpl.ttx -d fo_q >/dev/null 2>&1
