@@ -12,7 +12,7 @@ reg=lab[H-by:,W-bx:];chroma=np.hypot(reg[...,1]-128,reg[...,2]-128)
 m=((chroma<10)&(reg[...,0]>110)&(reg[...,0]<238)).astype(np.uint8)*255
 m=cv2.dilate(m,np.ones((7,7),np.uint8))
 full=np.zeros(lab.shape[:2],np.uint8);full[H-by:,W-bx:]=m
-if full.any(): a=cv2.inpaint(a,full,7,cv2.INPAINT_TELEA);im=Image.fromarray(cv2.cvtColor(a,cv2.COLOR_BGR2RGB))
+if full.any() and not os.environ.get('NOWM'): a=cv2.inpaint(a,full,7,cv2.INPAINT_TELEA);im=Image.fromarray(cv2.cvtColor(a,cv2.COLOR_BGR2RGB))
 print('watermark px',int((full>0).sum()))
 os.makedirs('gem/cells',exist_ok=True)
 for i,(k,e,name) in enumerate(S['items']):
