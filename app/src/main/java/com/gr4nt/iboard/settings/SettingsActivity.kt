@@ -317,9 +317,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Emoji", "Apps draw typed emoji with your phone's own emoji font. With AURA Stickers on, apps that accept images from keyboards (WhatsApp, Telegram, Messages, Signal…) get the AURA emoji as a small sticker instead; other apps get a normal emoji.") {
-            switchRow(Icons.Kind.SMILEY, yellow, "Send as AURA Stickers", sp.getBoolean(com.gr4nt.iboard.emoji.EmojiSticker.PREF, true),
-                subtitle = "Keeps the AURA look where the app allows it") { putBool(com.gr4nt.iboard.emoji.EmojiSticker.PREF, it) }
+        l.section("Emoji", "Apps show typed emoji with your phone's own emoji font.") {
             navRow(Icons.Kind.SMILEY, orange, "AURA Emoji", "Built in") {
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle("AURA Emoji")

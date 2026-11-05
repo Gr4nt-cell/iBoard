@@ -18,14 +18,6 @@
 
         <activity android:name=".voice.MicrophonePermissionActivity" android:exported="false" />
 
-        <!-- Shares rendered AURA emoji stickers with the app being typed into. -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.emoji"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/emoji_paths" />
-        </provider>
 
         <activity
             android:name=".settings.SettingsActivity"

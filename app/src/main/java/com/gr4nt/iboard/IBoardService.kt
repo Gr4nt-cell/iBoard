@@ -528,12 +528,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
 
-    /** Types an emoji: as an AURA sticker where the app accepts images, otherwise as text. */
+    /** Types an emoji as text. */
     private fun commitEmoji(text: String) {
-        val ic = currentInputConnection ?: return
-        val asSticker = prefs.sp.getBoolean(com.gr4nt.iboard.emoji.EmojiSticker.PREF, true) &&
-            com.gr4nt.iboard.emoji.EmojiSticker.send(this, ic, currentInputEditorInfo, text)
-        if (!asSticker) ic.commitText(text, 1)
+        currentInputConnection?.commitText(text, 1)
     }
 
     override fun onEmojiResult(text: String) {
