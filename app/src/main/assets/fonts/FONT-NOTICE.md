@@ -7,3 +7,6 @@ assembled into a CBDT colour font with Noto Emoji's build tools (Apache License 
 
 The set grows in batches. Emoji not yet in the font are hidden from iBoard's emoji picker.
 The build pipeline and source images are in `design/aura-emoji/`.
+
+Skin-tone variants are generated from the AURA artwork by recolouring the skin (design/aura-emoji/tones/).
+Flag emoji are taken from Google's Noto Emoji 3D font, licensed under the SIL Open Font License 1.1.
