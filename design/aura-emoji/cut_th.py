@@ -17,7 +17,7 @@ for f in sorted(glob.glob(src+'/*.jpg')):
     fg=(~bgm).astype(np.uint8)
     fg=cv2.morphologyEx(fg,cv2.MORPH_OPEN,np.ones((3,3),np.uint8))
     nn,l3,st,_=cv2.connectedComponentsWithStats(fg,8)
-    if nn>1: fg=(l3==1+np.argmax(st[1:,4])).astype(np.uint8)|((st[l3,4]>st[1:,4].max()*0.05)&(l3>0)).astype(np.uint8)
+    if nn>1: fg=(l3==1+np.argmax(st[1:,4])).astype(np.uint8)|((st[l3,4]>st[1:,4].max()*float(os.environ.get("MINFRAC","0.05")))&(l3>0)).astype(np.uint8)
     fg=cv2.morphologyEx(fg,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
     # holes stay filled (eyes etc.)
     fill=fg.copy(); hn,hl,hs,_=cv2.connectedComponentsWithStats((1-fg).astype(np.uint8),4)
