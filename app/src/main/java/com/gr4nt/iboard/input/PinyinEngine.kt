@@ -20,6 +20,8 @@ class PinyinEngine private constructor(
         val seen = HashSet<String>()
         fun add(i: Int, consumes: Int) { if (seen.add(words[i])) out += Candidate(words[i], consumes) }
 
+        // 0. A whole phrase: the most likely split of the input into words (woaini → 我爱你).
+        if (input.length >= 4) phrase(input)?.let { if (seen.add(it)) out += Candidate(it, input.length) }
         // 1. Words spelled exactly as typed.
         exact(input).take(12).forEach { add(it, input.length) }
         // 2. Words that start with what's typed (an unfinished syllable or word).
@@ -33,6 +35,28 @@ class PinyinEngine private constructor(
             k--
         }
         return out.take(limit)
+    }
+
+    /** Splits the whole input into dictionary words, favouring fewer, more common words. */
+    private fun phrase(input: String): String? {
+        val n = input.length
+        val score = DoubleArray(n + 1) { Double.NEGATIVE_INFINITY }
+        val from = IntArray(n + 1) { -1 }
+        val pick = arrayOfNulls<String>(n + 1)
+        score[0] = 0.0
+        for (i in 0 until n) {
+            if (score[i] == Double.NEGATIVE_INFINITY) continue
+            for (j in i + 1..minOf(n, i + 14)) {
+                val best = exact(input.substring(i, j)).firstOrNull() ?: continue
+                val sc = score[i] + kotlin.math.ln(freqs[best] + 1.0) - 18.0
+                if (sc > score[j]) { score[j] = sc; from[j] = i; pick[j] = words[best] }
+            }
+        }
+        if (from[n] < 0) return null
+        val parts = ArrayList<String>()
+        var k = n
+        while (k > 0) { parts += pick[k]!!; k = from[k] }
+        return if (parts.size >= 2) parts.reversed().joinToString("") else null
     }
 
     private fun lowerBound(p: String): Int {
