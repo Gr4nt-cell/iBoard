@@ -13,7 +13,7 @@ def train(pair):
   for line in stream:
    digest.update(line.encode());parts=line.rstrip().split('\t',2)
    if len(parts)<3:continue
-   words=re.findall(r"[^\W\d_]+(?:['’][^\W\d_]+)*",parts[2].lower(),re.UNICODE)
+   words=re.findall(r"[\u0900-\u0963\u0971-\u097F]+",parts[2]) if lang=='hi' else re.findall(r"[^\W\d_]+(?:['’][^\W\d_]+)*",parts[2].lower(),re.UNICODE)
    if not 3<=len(words)<=50:continue
    words=[w.replace('’',"'") for w in words];seen+=1
    if int(parts[0])%10==0:
@@ -49,5 +49,8 @@ def train(pair):
    hits+=c in [w for w,n in scores.most_common(3)];total+=1
  report=dict(lang=lang,url=url,sentences=seen,heldout_sentences=len(held),heldout_words=total,top3_accuracy=hits/max(total,1),context_coverage=covered/max(total,1),bigrams=len(b),trigrams=len(t),corpus_prefix_sha256=digest.hexdigest(),sha256=hashlib.sha256(dest.read_bytes()).hexdigest())
  (out/(lang+'.json')).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report),flush=True)
+ALL=[('en','eng'),('es','spa'),('fr','fra'),('pt','por'),('de','deu'),('ar','ara'),('tr','tur'),('it','ita'),('pl','pol'),('da','dan'),('cs','ces'),('hi','hin'),('ko','kor')]
 if __name__=='__main__':
- with concurrent.futures.ThreadPoolExecutor(3) as ex:list(ex.map(train, [('en','eng'),('es','spa'),('fr','fra'),('pt','por'),('de','deu'),('ar','ara')]))
+ import sys
+ pick=set(sys.argv[1].split(',')) if len(sys.argv)>1 else None
+ with concurrent.futures.ThreadPoolExecutor(3) as ex:list(ex.map(train,[x for x in ALL if pick is None or x[0] in pick]))

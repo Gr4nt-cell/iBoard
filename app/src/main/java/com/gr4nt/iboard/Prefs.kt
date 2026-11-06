@@ -120,7 +120,7 @@ class Prefs(context: Context) {
         const val HIDE_ICON = "hide_app_icon"
         const val EMOJI_STYLE = "emoji_style"
 
-        val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "ar")
+        val ALL_LANGS = listOf("en", "es", "fr", "pt", "de", "it", "tr", "pl", "da", "cs", "ar", "hi", "ko", "zh")
 
         fun languageLabel(code: String): String = when (code) {
             "en" -> "English"
@@ -129,6 +129,14 @@ class Prefs(context: Context) {
             "pt" -> "Português"
             "de" -> "Deutsch"
             "ar" -> "العربية"
+            "tr" -> "Türkçe"
+            "it" -> "Italiano"
+            "pl" -> "Polski"
+            "da" -> "Dansk"
+            "cs" -> "Čeština"
+            "hi" -> "हिन्दी"
+            "ko" -> "한국어"
+            "zh" -> "简体中文"
             else -> code
         }
 
@@ -139,6 +147,14 @@ class Prefs(context: Context) {
             "pt" -> "Portuguese"
             "de" -> "German"
             "ar" -> "Arabic"
+            "tr" -> "Turkish"
+            "it" -> "Italian"
+            "pl" -> "Polish"
+            "da" -> "Danish"
+            "cs" -> "Czech"
+            "hi" -> "Hindi"
+            "ko" -> "Korean"
+            "zh" -> "Chinese (Pinyin)"
             else -> code
         }
     }

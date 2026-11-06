@@ -97,6 +97,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun toggleVoice() {
+        finishComposer()
         online?.let { it.stop(); voiceMessage("Finishing… Tap mic to cancel"); online = null; return }
         if (voiceJob?.isActive == true) {
             if (recorder != null) {
@@ -395,6 +396,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInput() {
         cancelVoice()
+        clearComposer()
         super.onFinishInput()
     }
 
@@ -412,18 +414,104 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         candidatesStart: Int, candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        // The user moved the cursor away from the text being composed: keep it as typed.
+        if (composing && (candidatesEnd < 0 || newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
+            currentInputConnection?.finishComposingText()
+            clearComposer()
+        }
         keyboard?.removeCallbacks(refreshRunnable)
         keyboard?.post(refreshRunnable)
     }
 
     private val refreshRunnable = Runnable { refresh() }
 
+    // ------------------------------------------------------------ Korean and Chinese composition
+
+    private val hangul = com.gr4nt.iboard.input.HangulComposer()
+    private val pinyin = StringBuilder()
+    private var pinyinCands: List<com.gr4nt.iboard.input.PinyinEngine.Candidate> = emptyList()
+    private var pinyinEngine: com.gr4nt.iboard.input.PinyinEngine? = null
+    private val composing get() = hangul.isActive || pinyin.isNotEmpty()
+
+    /** Languages where predictions are offered but words are never changed automatically. */
+    private val noAutoCorrectLangs = setOf("hi", "ko", "zh")
+
+    private fun clearComposer() {
+        hangul.reset()
+        pinyin.setLength(0)
+        pinyinCands = emptyList()
+        keyboard?.candidates = emptyList()
+    }
+
+    /** Ends Korean/Chinese composition. Chinese commits its best candidates when [convert]. */
+    private fun finishComposer(convert: Boolean = false) {
+        if (!composing) return
+        val ic = currentInputConnection
+        if (pinyin.isNotEmpty() && convert && ic != null) {
+            var guard = 0
+            while (pinyin.isNotEmpty() && pinyinCands.isNotEmpty() && guard++ < 12) applyCandidate(ic, pinyinCands[0])
+        }
+        ic?.finishComposingText()
+        clearComposer()
+    }
+
+    private fun updateCandidates() {
+        val engine = pinyinEngine ?: com.gr4nt.iboard.input.PinyinEngine.load(applicationContext).also { pinyinEngine = it }
+        pinyinCands = engine.candidates(pinyin.toString())
+        keyboard?.candidates = pinyinCands.map { it.text }
+    }
+
+    private fun applyCandidate(ic: android.view.inputmethod.InputConnection, c: com.gr4nt.iboard.input.PinyinEngine.Candidate) {
+        val rest = pinyin.substring(minOf(c.consumes, pinyin.length))
+        ic.commitText(c.text, 1)
+        pinyin.setLength(0); pinyin.append(rest)
+        if (rest.isNotEmpty()) { ic.setComposingText(rest, 1); updateCandidates() }
+        else { pinyinCands = emptyList(); keyboard?.candidates = emptyList() }
+    }
+
+    override fun onCandidate(index: Int) {
+        val c = pinyinCands.getOrNull(index) ?: return
+        val ic = currentInputConnection ?: return
+        feedback(KeyType.CHAR)
+        ic.beginBatchEdit()
+        applyCandidate(ic, c)
+        ic.endBatchEdit()
+    }
+
+    /** Handles a key in Korean or Chinese. Returns true if it was used for composition. */
+    private fun compose(ic: android.view.inputmethod.InputConnection, text: String): Boolean {
+        if (page != Page.LETTERS) return false
+        if (lang == "ko" && com.gr4nt.iboard.input.HangulComposer.isJamo(text)) {
+            val (commit, comp) = hangul.input(text[0])
+            ic.beginBatchEdit()
+            if (commit.isNotEmpty()) ic.commitText(commit, 1)
+            if (comp.isNotEmpty()) ic.setComposingText(comp, 1)
+            ic.endBatchEdit()
+            return true
+        }
+        if (lang == "zh" && text.length == 1 && text[0].lowercaseChar() in 'a'..'z') {
+            pinyin.append(text[0].lowercaseChar())
+            ic.setComposingText(pinyin, 1)
+            updateCandidates()
+            return true
+        }
+        // Anything else ends the syllable (Korean) or converts the pinyin (Chinese) first.
+        finishComposer(convert = true)
+        return false
+    }
+
     // ------------------------------------------------------------ layout & language
 
     private fun setLanguage(code: String, rebuild: Boolean) {
+        finishComposer()
         lang = code
         suggester = loaded[code]
-        if (suggester == null) {
+        if (code == "zh") {
+            if (pinyinEngine == null) scope.launch {
+                val e = withContext(Dispatchers.Default) { com.gr4nt.iboard.input.PinyinEngine.load(applicationContext) }
+                pinyinEngine = e
+            }
+        } else if (suggester == null) {
             scope.launch {
                 val s = withContext(Dispatchers.Default) { loadSuggester(applicationContext, code) }
                 if (lang == code) { suggester = s; refresh() }
@@ -468,7 +556,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             when (key.type) {
                 KeyType.CHAR -> {
                     var c = key.label
-                    if (page == Page.LETTERS && shift != ShiftState.OFF && c.length == 1) c = c.uppercase()
+                    if (page == Page.LETTERS && shift != ShiftState.OFF && c.length == 1) c = Layouts.shifted(c, lang)
                     buf.append(c)
                     if (shift == ShiftState.ON) { shift = ShiftState.OFF; keyboard?.shift = shift }
                     translateSoon()
@@ -527,7 +615,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onShift(doubleTap: Boolean) {
-        if (lang == "ar") return
+        if (lang in Layouts.NO_SHIFT_KEY) return
         shift = when {
             doubleTap -> ShiftState.LOCKED
             shift == ShiftState.OFF -> ShiftState.ON
@@ -552,6 +640,19 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
         val ic = currentInputConnection ?: return
         spaceAutoInserted = false
+        if (hangul.isActive) {
+            hangul.backspace()
+            val comp = hangul.composing
+            ic.setComposingText(comp, 1)
+            if (comp.isEmpty()) { ic.finishComposingText(); hangul.reset() }
+            return
+        }
+        if (pinyin.isNotEmpty()) {
+            pinyin.setLength(pinyin.length - 1)
+            ic.setComposingText(pinyin, 1)
+            if (pinyin.isEmpty()) { ic.finishComposingText(); clearComposer() } else updateCandidates()
+            return
+        }
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) {
             ic.commitText("", 1); return
@@ -606,6 +707,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onSuggestion(index: Int) {
         val s = shown.getOrNull(index) ?: return
         val ic = currentInputConnection ?: return
+        finishComposer()
         val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
         feedback(KeyType.CHAR)
         ic.beginBatchEdit()
@@ -638,6 +740,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     /** Types an emoji as text. */
     private fun commitEmoji(text: String) {
+        finishComposer()
         currentInputConnection?.commitText(text, 1)
     }
 
@@ -671,6 +774,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun startTranslate() {
+        finishComposer()
         if (password) { toast("Translation is unavailable in password fields"); return }
         endEmojiSearch(); closePanels()
         currentInputConnection?.finishComposingText()
@@ -861,10 +965,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun typeText(raw: String) {
         val ic = currentInputConnection ?: return
         var text = raw
-        if (page == Page.LETTERS && shift != ShiftState.OFF && text.length == 1) {
-            val up = text.uppercase()
-            if (up.length == 1) text = up
-        }
+        if (page == Page.LETTERS && shift != ShiftState.OFF && text.length == 1) text = Layouts.shifted(text, lang)
+        if (compose(ic, text)) { lastAutoCorrect = null; afterType(text); return }
         val isPunct = text.length == 1 && text[0] in ".,!?;:)"
         ic.beginBatchEdit()
         if (isPunct) {
@@ -894,7 +996,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     /** Replaces the word before the cursor with the pending correction, then adds [separator]. */
     private fun applyAutoCorrect(ic: android.view.inputmethod.InputConnection, separator: String): String? {
-        if (!prefs.autoCorrect || noAutoCorrect) return null
+        if (!prefs.autoCorrect || noAutoCorrect || lang in noAutoCorrectLangs) return null
         val target = pendingAutoCorrect ?: return null
         val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
         if (word.isEmpty() || word == target) return null
@@ -908,6 +1010,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun onSpace() {
         val ic = currentInputConnection ?: return
+        // Chinese: space picks the first candidate, like iOS.
+        if (pinyin.isNotEmpty()) { ic.beginBatchEdit(); finishComposer(convert = true); ic.endBatchEdit(); return }
+        finishComposer()
         val now = SystemClock.uptimeMillis()
         val before = ic.getTextBeforeCursor(3, 0)?.toString() ?: ""
         if (prefs.doubleSpacePeriod && now - lastSpaceAt < 650 && before.length >= 2 &&
@@ -938,6 +1043,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun onReturn() {
         val ic = currentInputConnection ?: return
+        // Chinese: return keeps the letters as typed.
+        if (pinyin.isNotEmpty()) { finishComposer(); return }
+        finishComposer()
         val info = currentInputEditorInfo
         val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
         if (word.isNotEmpty()) learn(word)
@@ -978,6 +1086,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         while (i > 0) {
             val c = before[i - 1]
             if (c.isLetter() || Character.getType(c) == Character.NON_SPACING_MARK.toInt() ||
+                Character.getType(c) == Character.COMBINING_SPACING_MARK.toInt() ||
                 (c == '\'' && i > 1 && before[i - 2].isLetter())
             ) i-- else break
         }
@@ -992,7 +1101,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun refreshShift() {
         val kv = keyboard ?: return
-        if (page != Page.LETTERS || lang == "ar" || shift == ShiftState.LOCKED) return
+        if (page != Page.LETTERS || lang in Layouts.NO_CASE || shift == ShiftState.LOCKED) return
         val ic = currentInputConnection ?: return
         val info = currentInputEditorInfo ?: return
         val caps = if (!prefs.autoCap) false else if (ownCaps) {
@@ -1009,7 +1118,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun refreshSuggestions() {
         val kv = keyboard ?: return
         val ic = currentInputConnection ?: return
-        if (password) {
+        if (password || lang == "zh") {
             show(emptyList()); return
         }
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
@@ -1027,7 +1136,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         pendingAutoCorrect = null
         if (word.isNotEmpty()) {
             if (s == null) local = listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else {
-                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect, sentenceStart, prev2)
+                val r = s.forWord(word, prev, prefs.autoCorrect && !noAutoCorrect && lang !in noAutoCorrectLangs, sentenceStart, prev2)
                 pendingAutoCorrect = r.autoCorrect
                 local = r.items
             }
@@ -1051,6 +1160,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun panelHeight(): Int = keyboard?.let { maxOf(it.height, it.desiredHeight().toInt()) } ?: 0
 
     private fun showEmoji() {
+        finishComposer()
         val frame = root ?: return
         val t = kbTheme ?: return
         closePanels()
@@ -1076,6 +1186,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun showClipboard() {
+        finishComposer()
         val frame = root ?: return
         val t = kbTheme ?: return
         closePanels()

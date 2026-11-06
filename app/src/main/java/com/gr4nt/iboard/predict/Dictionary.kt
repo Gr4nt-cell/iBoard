@@ -111,6 +111,12 @@ class Dictionary private constructor(
                 n = n.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
                     .replace('ى', 'ي').replace('ة', 'ه')
             }
+            // A lone Korean jamo still being composed matches syllables that start with it.
+            if (n.any { it in '\u3131'..'\u3163' }) n = n.map { c ->
+                val ci = com.gr4nt.iboard.input.HangulComposer.CHO.indexOf(c)
+                val vi = com.gr4nt.iboard.input.HangulComposer.JUNG.indexOf(c)
+                when { ci >= 0 -> (0x1100 + ci).toChar(); vi >= 0 -> (0x1161 + vi).toChar(); else -> c }
+            }.joinToString("")
             // Apostrophes are ignored when matching, so "dont" finds "don't" and "cest" finds "c'est".
             return n.replace("ß", "ss").replace("œ", "oe").replace("æ", "ae")
                 .replace("'", "").replace("\u2019", "")

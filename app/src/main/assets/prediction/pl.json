@@ -1,0 +1,13 @@
+{
+  "lang": "pl",
+  "url": "https://downloads.tatoeba.org/exports/per_language/pol/pol_sentences.tsv.bz2",
+  "sentences": 125327,
+  "heldout_sentences": 2000,
+  "heldout_words": 7086,
+  "top3_accuracy": 0.2314422805532035,
+  "context_coverage": 0.864803838554897,
+  "bigrams": 28688,
+  "trigrams": 32223,
+  "corpus_prefix_sha256": "0d6e1e2fe62683dbb3c2dd293c85fb25a885e96335a27f858268d156c3adb7eb",
+  "sha256": "d88b17d90d20d448d4e8a3ed62abc956e7055319181041a5aec35720b243e79e"
+}

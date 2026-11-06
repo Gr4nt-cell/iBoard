@@ -36,7 +36,9 @@ class OnlineSpeech(
         }
 
         fun locale(lang: String) = when (lang) {
-            "es" -> "es-ES"; "fr" -> "fr-FR"; "pt" -> "pt-BR"; "de" -> "de-DE"; "ar" -> "ar"; else -> "en-US"
+            "es" -> "es-ES"; "fr" -> "fr-FR"; "pt" -> "pt-BR"; "de" -> "de-DE"; "ar" -> "ar"
+            "tr" -> "tr-TR"; "it" -> "it-IT"; "pl" -> "pl-PL"; "da" -> "da-DK"; "cs" -> "cs-CZ"
+            "hi" -> "hi-IN"; "ko" -> "ko-KR"; "zh" -> "zh-CN"; else -> "en-US"
         }
     }
 

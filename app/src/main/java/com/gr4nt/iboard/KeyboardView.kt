@@ -38,6 +38,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onGlobeLongPress()
         fun onCursorMove(steps: Int)
         fun onSuggestion(index: Int)
+        fun onCandidate(index: Int)
         fun onStripButton(type: KeyType)
         fun onKeyFeedback(key: Key)
         fun onEmojiResult(text: String)
@@ -64,6 +65,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         set(v) { field = v; invalidate() }
     var voiceActive: Boolean = false
         set(v) { field = v; invalidate() }
+    /** Chinese characters for the pinyin being typed; replaces the suggestions while shown. */
+    var candidates: List<String> = emptyList()
+        set(v) { field = v; candidateScroll = 0; invalidate() }
+    private var candidateScroll = 0
+    private val candidateRects = ArrayList<RectF>()
+
     var suggestions: List<Suggestion> = emptyList()
         set(v) { field = v; invalidate() }
     var languageLabel: String = ""
@@ -419,15 +426,15 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun displayLabel(label: String): String {
-        if ((shift == ShiftState.OFF && !look.uppercase) || label.length != 1) return label
-        val up = label.uppercase()
-        return if (up.length == 1) up else label
+        val lang = layout?.lang ?: "en"
+        if (label.length != 1) return label
+        if (shift == ShiftState.OFF && (!look.uppercase || lang in Layouts.NO_CASE)) return label
+        return Layouts.shifted(label, lang)
     }
 
     private fun typedLabel(label: String): String {
         if (shift == ShiftState.OFF || label.length != 1) return label
-        val up = label.uppercase()
-        return if (up.length == 1) up else label
+        return Layouts.shifted(label, layout?.lang ?: "en")
     }
 
     private fun baseline(cy: Float, p: Paint): Float = cy - (p.descent() + p.ascent()) / 2f
@@ -691,7 +698,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             stripPaint.textAlign = Paint.Align.CENTER
             val label = TextUtils.ellipsize(status, stripPaint, width - 110 * d, TextUtils.TruncateAt.END).toString()
             canvas.drawText(label, width / 2f, baseline(stripH / 2f, stripPaint), stripPaint)
-        } else drawSuggestions(canvas)
+        } else if (candidates.isNotEmpty()) drawCandidates(canvas)
+        else drawSuggestions(canvas)
     }
 
     private fun drawStripIcons(canvas: Canvas) {
@@ -713,6 +721,64 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val color = if (type == KeyType.MIC && voiceActive) theme.accent else iconColor
             Icons.draw(canvas, kind, cx, stripH / 2f, 19 * d, color)
         }
+    }
+
+    /** Lays candidates left to right; the last cell is a "more" arrow when they don't all fit. */
+    private fun layoutCandidates(): List<Pair<Int, RectF>> {
+        candidateRects.clear()
+        val out = ArrayList<Pair<Int, RectF>>()
+        stripPaint.textSize = 20 * sp
+        val right = width - rightW - 4 * d
+        val moreW = 36 * d
+        var x = leftW + 6 * d
+        var i = candidateScroll
+        while (i < candidates.size) {
+            val w = stripPaint.measureText(candidates[i]) + 26 * d
+            val limit = if (i == candidates.size - 1) right else right - moreW
+            if (x + w > limit && out.isNotEmpty()) break
+            out += i to RectF(x, 0f, x + w, stripH)
+            x += w; i++
+        }
+        return out
+    }
+
+    private fun drawCandidates(canvas: Canvas) {
+        val cells = layoutCandidates()
+        stripPaint.typeface = Typeface.DEFAULT
+        stripPaint.textAlign = Paint.Align.CENTER
+        stripPaint.textSize = 20 * sp
+        for ((n, cell) in cells.withIndex()) {
+            val (i, r) = cell
+            if (i == 0 || stripPressed == 400 + i) {
+                fillPaint.color = if (stripPressed == 400 + i) theme.keyFillPressed else theme.keyFill
+                tmpRect.set(r.left + 2 * d, 7 * d, r.right - 2 * d, stripH - 7 * d)
+                canvas.drawRoundRect(tmpRect, 9 * d, 9 * d, fillPaint)
+            }
+            stripPaint.color = theme.stripText
+            canvas.drawText(candidates[i], r.centerX(), baseline(stripH / 2f, stripPaint), stripPaint)
+            if (n > 0 && i != 0) {
+                dividerPaint.color = theme.stripDivider
+                canvas.drawLine(r.left, stripH * 0.32f, r.left, stripH * 0.68f, dividerPaint)
+            }
+        }
+        val last = cells.lastOrNull()?.first ?: 0
+        if (last < candidates.size - 1 || candidateScroll > 0) {
+            val cx = width - rightW - 22 * d
+            if (stripPressed == 499) {
+                fillPaint.color = theme.keyFillPressed
+                canvas.drawCircle(cx, stripH / 2f, 16 * d, fillPaint)
+            }
+            stripPaint.color = theme.stripText.withAlpha(0.6f)
+            canvas.drawText(if (last < candidates.size - 1) "›" else "‹", cx, baseline(stripH / 2f, stripPaint), stripPaint)
+        }
+    }
+
+    private fun candidateHit(x: Float): Int {
+        val cells = layoutCandidates()
+        val last = cells.lastOrNull()?.first ?: 0
+        if ((last < candidates.size - 1 || candidateScroll > 0) && x > width - rightW - 40 * d) return 499
+        cells.forEach { (i, r) -> if (x >= r.left && x < r.right) return 400 + i }
+        return -2
     }
 
     private fun drawSuggestions(canvas: Canvas) {
@@ -822,6 +888,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val i = xs.indices.minByOrNull { abs(xs[it] - x) } ?: return -2
             return if (abs(xs[i] - x) < btnW * 0.75f) -10 - i else -2
         }
+        if (candidates.isNotEmpty()) return candidateHit(x)
         if (suggestions.isEmpty()) return -2
         slotRects().forEachIndexed { i, r -> if (x >= r.left && x < r.right) return i }
         return -2
@@ -831,6 +898,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         when (slot) {
             100 -> listener.onEmojiSearchClose()
             in 300..303 -> listener.onTranslateBar(slot - 300)
+            499 -> {
+                val last = layoutCandidates().lastOrNull()?.first ?: 0
+                candidateScroll = if (last < candidates.size - 1) last + 1 else 0
+                invalidate()
+            }
+            in 400..498 -> listener.onCandidate(slot - 400)
             in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
             in -15..-10 -> look.stripButtons.getOrNull(-10 - slot)?.let { listener.onStripButton(it) }
             in 0..2 -> {

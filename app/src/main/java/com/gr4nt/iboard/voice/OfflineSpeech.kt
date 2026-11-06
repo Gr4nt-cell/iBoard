@@ -81,6 +81,14 @@ object WhisperLib {
         "pt" -> "Olá, tudo bem? Tudo ótimo, obrigado. Até amanhã."
         "de" -> "Hallo, wie geht's? Gut, danke. Bis morgen."
         "ar" -> "مرحبا، كيف حالك؟ بخير، شكرا. أراك غدا."
+        "tr" -> "Merhaba, nasılsın? İyiyim, teşekkürler. Yarın görüşürüz."
+        "it" -> "Ciao, come stai? Bene, grazie. A domani."
+        "pl" -> "Cześć, jak się masz? Dobrze, dziękuję. Do jutra."
+        "da" -> "Hej, hvordan går det? Godt, tak. Vi ses i morgen."
+        "cs" -> "Ahoj, jak se máš? Dobře, děkuji. Uvidíme se zítra."
+        "hi" -> "नमस्ते, आप कैसे हैं? मैं ठीक हूँ, धन्यवाद। कल मिलते हैं।"
+        "ko" -> "안녕하세요, 잘 지내세요? 네, 잘 지내요. 내일 봐요."
+        "zh" -> "你好，最近怎么样？我很好，谢谢。明天见。"
         else -> "Hello, how are you? I'm fine, thanks. See you tomorrow."
     }
 }

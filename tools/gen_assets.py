@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Builds iBoard's bundled assets.
 
-Usage: python3 tools/gen_assets.py <FrequencyWords checkout> <unicode-emoji-json checkout>
+Usage: python3 tools/gen_assets.py <FrequencyWords checkout> <unicode-emoji-json checkout or -> [lang,lang,...]
 
 Sources (both open data):
-  - hermitdave/FrequencyWords (content/2018/<lang>/<lang>_50k.txt), MIT / CC-BY-SA
+  - hermitdave/FrequencyWords (content/2018/<lang>/<lang>_50k.txt; Hindi only has hi_full.txt, copy it to hi_50k.txt), MIT / CC-BY-SA
   - muan/unicode-emoji-json (data-by-group.json), MIT
 """
 import json
@@ -13,15 +13,18 @@ import re
 import sys
 import unicodedata
 
-LANGS = ["en", "es", "fr", "pt", "de", "ar"]
+LANGS = ["en", "es", "fr", "pt", "de", "ar", "tr", "it", "pl", "da", "cs", "hi", "ko"]
 MAX_WORDS = 40000
 
 LATIN = re.compile(r"^[^\W\d_]+(?:['\-][^\W\d_]+)*$", re.UNICODE)
 ARABIC = re.compile(r"^[ء-غف-يٱ-ۓ]+$")
+DEVANAGARI = re.compile(r"^[\u0900-\u0963\u0971-\u097F]+$")
+HANGUL = re.compile(r"^[\uAC00-\uD7A3]+$")
 TASHKEEL = re.compile(r"[ً-ْـ]")
 SINGLE_OK = {
     "en": set("ai"), "es": set("aeoyu"), "fr": set("aày"), "pt": set("aeoà"),
-    "de": set(), "ar": set("وب"),
+    "de": set(), "ar": set("وب"), "tr": set("o"), "it": set("aeiòè"), "pl": set("aiwzou"),
+    "da": set("i"), "cs": set("aiksvzou"), "hi": set("व"), "ko": set(),
 }
 
 
@@ -40,6 +43,12 @@ def build_dict(fw_root, out_dir):
                 if lang == "ar":
                     word = TASHKEEL.sub("", word)
                     if not ARABIC.match(word):
+                        continue
+                elif lang == "hi":
+                    if not DEVANAGARI.match(word):
+                        continue
+                elif lang == "ko":
+                    if not HANGUL.match(word):
                         continue
                 else:
                     word = word.lower()
@@ -124,5 +133,8 @@ def build_emoji(emoji_root, out_path):
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     assets = os.path.join(here, "..", "app", "src", "main", "assets")
+    if len(sys.argv) > 3:
+        LANGS[:] = sys.argv[3].split(",")
     build_dict(sys.argv[1], os.path.join(assets, "dict"))
-    build_emoji(sys.argv[2], os.path.join(assets, "emoji.tsv"))
+    if sys.argv[2] != "-":
+        build_emoji(sys.argv[2], os.path.join(assets, "emoji.tsv"))

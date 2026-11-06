@@ -156,6 +156,13 @@ class Suggester(
             "pt" to listOf("Eu", "Olá", "Obrigado", "O", "A", "Sim"),
             "de" to listOf("Ich", "Hallo", "Danke", "Das", "Ja", "Wir"),
             "ar" to listOf("مرحبا", "شكرا", "أنا", "في", "هل", "السلام"),
+            "tr" to listOf("Merhaba", "Bu", "Ben", "Teşekkürler", "Evet", "Ne"),
+            "it" to listOf("Ciao", "Io", "Grazie", "Il", "Sì", "La"),
+            "pl" to listOf("Cześć", "To", "Ja", "Dziękuję", "Tak", "Nie"),
+            "da" to listOf("Hej", "Jeg", "Tak", "Det", "Ja", "Vi"),
+            "cs" to listOf("Ahoj", "To", "Já", "Děkuji", "Ano", "Ne"),
+            "hi" to listOf("मैं", "नमस्ते", "धन्यवाद", "क्या", "यह", "हाँ"),
+            "ko" to listOf("안녕하세요", "네", "감사합니다", "저는", "오늘", "그래"),
         )
 
         /** Mirrors the case the user typed onto a suggestion. */
