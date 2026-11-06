@@ -1065,6 +1065,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             override fun onAbc() = closePanels()
             override fun onFeedback() = feedback(KeyType.CHAR)
             override fun onSearch() = startEmojiSearch()
+            override fun onMedia(entry: com.gr4nt.iboard.emoji.MediaLibrary.Entry) {
+                if (!com.gr4nt.iboard.emoji.MediaLibrary.send(this@IBoardService, entry)) {
+                    val what = if (entry.gif) "GIFs" else "stickers"
+                    Toast.makeText(this@IBoardService, "This app doesn't accept $what from the keyboard here", Toast.LENGTH_SHORT).show()
+                }
+            }
         })
         emojiPanel = panel
         keyboard?.visibility = View.GONE

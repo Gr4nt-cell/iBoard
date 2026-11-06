@@ -4,7 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -41,6 +45,7 @@ class EmojiPanel(
         fun onAbc()
         fun onFeedback()
         fun onSearch()
+        fun onMedia(entry: MediaLibrary.Entry)
     }
 
     private val d = resources.displayMetrics.density
@@ -56,6 +61,13 @@ class EmojiPanel(
     private val main = Handler(Looper.getMainLooper())
     private val message = TextView(context)
     private val tabs = TabPill(context)
+    private val media = RecyclerView(context)
+    private val mediaLayout = GridLayoutManager(context, 3)
+    private val mediaAdapter = MediaAdapter()
+    private var mediaItems: List<MediaItem> = emptyList()
+
+    /** A GIF/sticker grid entry: a pack title (spans the row) or one item. */
+    private data class MediaItem(val entry: MediaLibrary.Entry?, val header: String? = null)
 
     /** A grid entry: a section title (spans the row) or one emoji. */
     private data class Item(val emoji: Emoji?, val category: Int, val header: String? = null)
@@ -108,6 +120,16 @@ class EmojiPanel(
             setPadding(0, 0, 0, bottomH)
             visibility = GONE
         }
+        mediaLayout.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int) = if (mediaItems.getOrNull(position)?.header != null) mediaLayout.spanCount else 1
+        }
+        media.layoutManager = mediaLayout
+        media.adapter = mediaAdapter
+        media.setPadding((8 * d).toInt(), (4 * d).toInt(), (8 * d).toInt(), bottomH)
+        media.clipToPadding = false
+        media.itemAnimator = null
+        media.visibility = GONE
+        body.addView(media, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         body.addView(message, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         val bottom = FrameLayout(context)
@@ -144,11 +166,138 @@ class EmojiPanel(
     private fun selectTab(i: Int) {
         listener.onFeedback()
         tabs.selected = i
+        message.visibility = GONE
         if (i == 0) {
-            grid.visibility = VISIBLE; message.visibility = GONE
-        } else {
-            grid.visibility = INVISIBLE; message.visibility = VISIBLE
-            message.text = if (i == 1) "GIFs are coming soon" else "Stickers are coming soon"
+            grid.visibility = VISIBLE; media.visibility = GONE
+            return
+        }
+        grid.visibility = INVISIBLE; media.visibility = VISIBLE
+        val list = ArrayList<MediaItem>()
+        try {
+            if (i == 1) {
+                list += MediaItem(null, "AURA GIFs")
+                MediaLibrary.gifs(context).forEach { list += MediaItem(it) }
+            } else {
+                MediaLibrary.stickerPacks(context).forEach { (pack, items) ->
+                    list += MediaItem(null, pack)
+                    items.forEach { list += MediaItem(it) }
+                }
+            }
+        } catch (_: Exception) {
+            media.visibility = GONE; message.visibility = VISIBLE
+            message.text = "Couldn't load " + (if (i == 1) "GIFs" else "stickers")
+            return
+        }
+        val cell = if (i == 1) 112 else 84
+        mediaLayout.spanCount = (width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).let { (it / (cell * d)).toInt().coerceIn(3, 10) }
+        mediaItems = list
+        mediaAdapter.notifyDataSetChanged()
+        media.scrollToPosition(0)
+    }
+
+    private inner class MediaAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount() = mediaItems.size
+        override fun getItemViewType(position: Int) = if (mediaItems[position].header != null) 1 else 0
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val v: View = if (viewType == 1) TextView(parent.context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(theme.keySubText)
+                letterSpacing = 0.04f
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding((6 * d).toInt(), (6 * d).toInt(), 0, 0)
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (32 * d).toInt())
+            } else MediaCell(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            return object : RecyclerView.ViewHolder(v) {}
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            val item = mediaItems[position]
+            if (item.header != null) { (holder.itemView as TextView).text = item.header; return }
+            val e = item.entry ?: return
+            val v = holder.itemView as MediaCell
+            v.rounded = e.gif
+            v.entry = e
+            v.contentDescription = e.label
+            v.setOnClickListener { listener.onFeedback(); listener.onMedia(e) }
+        }
+    }
+
+    /** A square GIF or sticker preview. GIFs play while on screen (Android 9+). */
+    private inner class MediaCell(context: Context) : View(context) {
+        var rounded = false
+        private var drawable: Drawable? = null
+        private val press = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val clip = Path()
+        private val rect = RectF()
+        var entry: MediaLibrary.Entry? = null
+            set(v) {
+                if (field == v) return
+                field = v
+                drawable?.let { (it as? Animatable)?.stop(); if (it.callback === this) it.callback = null }
+                drawable = null
+                invalidate()
+                val path = v?.path ?: return
+                val size = maxOf(width, (90 * d).toInt())
+                MediaLibrary.preview(context, path, size) { dr ->
+                    if (entry?.path != path) return@preview
+                    drawable = dr
+                    dr.callback = this
+                    if (isAttachedToWindow) (dr as? Animatable)?.start()
+                    invalidate()
+                }
+            }
+
+        init { isClickable = true }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            setMeasuredDimension(w, w)
+        }
+
+        override fun verifyDrawable(who: Drawable) = who === drawable || super.verifyDrawable(who)
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            drawable?.let { it.callback = this; (it as? Animatable)?.start() }
+        }
+
+        override fun onDetachedFromWindow() {
+            (drawable as? Animatable)?.stop()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val m = 3 * d
+            rect.set(m, m, width - m, height - m)
+            val r = 14 * d
+            if (rounded) {
+                press.color = if (theme.dark) 0x1FFFFFFF else 0x0F000000
+                canvas.drawRoundRect(rect, r, r, press)
+            }
+            if (isPressed) {
+                press.color = if (theme.dark) 0x26FFFFFF else 0x14000000
+                canvas.drawRoundRect(rect, r, r, press)
+            }
+            val dr = drawable ?: return
+            canvas.save()
+            if (rounded) {
+                clip.reset(); clip.addRoundRect(rect, r, r, Path.Direction.CW); canvas.clipPath(clip)
+                dr.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
+            } else {
+                val inset = (6 * d).toInt()
+                dr.setBounds(inset, inset, width - inset, height - inset)
+            }
+            if (isPressed && !rounded) canvas.scale(0.94f, 0.94f, width / 2f, height / 2f)
+            dr.draw(canvas)
+            canvas.restore()
+        }
+
+        override fun drawableStateChanged() {
+            super.drawableStateChanged(); invalidate()
         }
     }
 
