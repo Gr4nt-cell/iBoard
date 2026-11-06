@@ -28,7 +28,20 @@ class Prefs(context: Context) {
     val uppercaseLabels: Boolean get() = sp.getBoolean(UPPERCASE_LABELS, true)
     val spaceLabel: Boolean get() = sp.getBoolean(SPACE_LABEL, false)
     val utilityRow: Boolean get() = sp.getBoolean(UTILITY_ROW, true)
-    val stripIcons: Boolean get() = sp.getBoolean(STRIP_ICONS, false)
+    /** Icon-capsule buttons the user moved to the suggestion bar, in capsule order. The capsule keeps the rest. */
+    val stripButtons: List<KeyType>
+        get() {
+            val saved = sp.getString(STRIP_BUTTONS, null)
+                ?: return if (sp.getBoolean(STRIP_ICONS, false)) listOf(KeyType.CLIPBOARD, KeyType.SETTINGS) else emptyList()
+            val set = saved.split(',').mapNotNull { n -> DOCK_BUTTONS.firstOrNull { it.name == n } }.toSet()
+            return DOCK_BUTTONS.filter { it in set }
+        }
+
+    fun setOnStrip(type: KeyType, onStrip: Boolean) {
+        val now = stripButtons.toMutableSet()
+        if (onStrip) now += type else now -= type
+        sp.edit().putString(STRIP_BUTTONS, DOCK_BUTTONS.filter { it in now }.joinToString(",") { it.name }).apply()
+    }
     val accentColor: String get() = sp.getString(ACCENT_COLOR, "blue") ?: "blue"
     val bgOpacity: Int get() = sp.getInt(BG_OPACITY, 58)
     val emojiStyle: String get() = "aura"
@@ -73,7 +86,7 @@ class Prefs(context: Context) {
     fun visualSignature(night: Boolean): String =
         listOf(
             theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
-            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripIcons, accentColor, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
+            keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripButtons.joinToString(), accentColor, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
         ).joinToString("|")
 
     companion object {
@@ -98,6 +111,10 @@ class Prefs(context: Context) {
         const val SPACE_LABEL = "space_label"
         const val UTILITY_ROW = "utility_row"
         const val STRIP_ICONS = "strip_icons"
+        const val STRIP_BUTTONS = "strip_buttons"
+        const val MAX_STRIP_BUTTONS = 4
+        /** The six icon-capsule buttons, in capsule order. */
+        val DOCK_BUTTONS = listOf(KeyType.SETTINGS, KeyType.EMOJI, KeyType.GLOBE, KeyType.MIC, KeyType.CLIPBOARD, KeyType.TRANSLATE)
         const val ACCENT_COLOR = "accent_color"
         const val BG_OPACITY = "bg_opacity"
         const val HIDE_ICON = "hide_app_icon"

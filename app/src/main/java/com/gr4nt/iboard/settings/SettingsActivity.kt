@@ -237,6 +237,50 @@ class SettingsActivity : AppCompatActivity() {
     }
     private var refreshVoice: () -> Unit = {}
 
+    private var stripRow: TextView? = null
+
+    private fun stripValue(): String = prefs.stripButtons.size.let { if (it == 0) "None" else "$it" }
+
+    private fun buttonName(t: com.gr4nt.iboard.KeyType) = when (t) {
+        com.gr4nt.iboard.KeyType.SETTINGS -> "Settings"
+        com.gr4nt.iboard.KeyType.EMOJI -> "Emoji"
+        com.gr4nt.iboard.KeyType.GLOBE -> "Languages"
+        com.gr4nt.iboard.KeyType.MIC -> "Dictation"
+        com.gr4nt.iboard.KeyType.CLIPBOARD -> "Clipboard"
+        else -> "Translator"
+    }
+
+    private fun buttonIcon(t: com.gr4nt.iboard.KeyType) = when (t) {
+        com.gr4nt.iboard.KeyType.SETTINGS -> Icons.Kind.GEAR
+        com.gr4nt.iboard.KeyType.EMOJI -> Icons.Kind.EMOJI
+        com.gr4nt.iboard.KeyType.GLOBE -> Icons.Kind.GLOBE
+        com.gr4nt.iboard.KeyType.MIC -> Icons.Kind.MIC
+        com.gr4nt.iboard.KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+        else -> Icons.Kind.TRANSLATE
+    }
+
+    /** Choose which of the six capsule buttons sit on the suggestion bar instead. */
+    private fun stripButtonsPage() {
+        push(subPage("Suggestion Bar") {
+            section(footer = "Turn a button on to move it from the icon capsule to the suggestion bar; turn it off to put it back in the capsule. Up to ${Prefs.MAX_STRIP_BUTTONS} fit on the suggestion bar.") {
+                val tints = listOf(gray, orange, blue, red, yellow, indigo)
+                Prefs.DOCK_BUTTONS.forEachIndexed { i, t ->
+                    lateinit var sw: IosSwitch
+                    sw = switchRow(buttonIcon(t), tints[i], buttonName(t), t in prefs.stripButtons,
+                        subtitle = null) { on ->
+                        if (on && prefs.stripButtons.size >= Prefs.MAX_STRIP_BUTTONS) {
+                            sw.isOn = false
+                            toast("Up to ${Prefs.MAX_STRIP_BUTTONS} buttons fit on the suggestion bar")
+                            return@switchRow
+                        }
+                        prefs.setOnStrip(t, on)
+                        stripRow?.text = stripValue()
+                    }
+                }
+            }
+        })
+    }
+
     private fun choicePage(title: String, entries: List<String>, values: List<String>, key: String, def: String, footer: String? = null) {
         lateinit var page: View
         fun build(): View = subPage(title) {
@@ -393,9 +437,9 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard and translator. Typing and predictions work offline.") {
+        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard and translator. Each button sits either in the capsule under the keys or on the suggestion bar.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
-            switchRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }
+            stripRow = navRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", stripValue()) { stripButtonsPage() }
         }
 
         l.section("Typing") {

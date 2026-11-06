@@ -321,7 +321,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 textPct = prefs.keyTextSize,
                 uppercase = prefs.uppercaseLabels,
                 spaceLabel = prefs.spaceLabel,
-                stripIcons = prefs.stripIcons,
+                stripButtons = prefs.stripButtons,
             )
         }
         frame.addView(kv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -438,6 +438,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         kv.layout = Layouts.build(
             lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
             utilityRow = prefs.utilityRow,
+            stripButtons = prefs.stripButtons.toSet(),
         )
         kv.languageLabel = Prefs.languageLabel(lang)
         val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
@@ -626,16 +627,13 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         if (page != Page.LETTERS) setPage(Page.LETTERS)
     }
 
-    override fun onClipboardButton() {
+    override fun onStripButton(type: KeyType) {
         feedback(KeyType.CHAR)
-        showClipboard()
+        onKey(Key(type))
     }
 
     override fun onKeyFeedback(key: Key) = feedback(key.type)
 
-    override fun onSettingsButton() {
-        startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
 
 
     /** Types an emoji as text. */

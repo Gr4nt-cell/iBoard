@@ -38,8 +38,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onGlobeLongPress()
         fun onCursorMove(steps: Int)
         fun onSuggestion(index: Int)
-        fun onClipboardButton()
-        fun onSettingsButton()
+        fun onStripButton(type: KeyType)
         fun onKeyFeedback(key: Key)
         fun onEmojiResult(text: String)
         fun onEmojiSearchClose()
@@ -80,7 +79,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val textPct: Int = 100,
         val uppercase: Boolean = true,
         val spaceLabel: Boolean = false,
-        val stripIcons: Boolean = false,
+        val stripButtons: List<KeyType> = emptyList(),
     )
 
     var look = Look()
@@ -504,12 +503,21 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     // --- suggestion bar ---
 
-    private val iconW get() = if (look.stripIcons) 44 * d else 4 * d
+    private val btnW get() = 40 * d
+    private val leftButtons get() = look.stripButtons.take((look.stripButtons.size + 1) / 2)
+    private val rightButtons get() = look.stripButtons.drop((look.stripButtons.size + 1) / 2)
+    private val leftW get() = if (leftButtons.isEmpty()) 4 * d else 6 * d + leftButtons.size * btnW
+    private val rightW get() = if (rightButtons.isEmpty()) 4 * d else 6 * d + rightButtons.size * btnW
+
+    /** Centre x of each suggestion-bar button, in [Look.stripButtons] order. */
+    private fun stripButtonX(): List<Float> =
+        leftButtons.indices.map { 6 * d + btnW * it + btnW / 2f } +
+            rightButtons.indices.map { width - 6 * d - btnW * (rightButtons.size - it) + btnW / 2f }
 
     private fun slotOrder(): IntArray = intArrayOf(1, 0, 2) // display slot -> suggestion index
 
     private fun slotRects(): List<RectF> {
-        val avail = width - 2 * iconW
+        val avail = width - leftW - rightW
         val texts = slotOrder().map { suggestions.getOrNull(it)?.text ?: "" }
         val minW = avail / 3f
         val wants = texts.map { t -> max(minW * 0.7f, stripPaint.measureText(t) + 28 * d) }
@@ -518,7 +526,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val extra = (avail - sum) / 3f
             wants.map { it + extra }
         } else wants.map { it / sum * avail }
-        var x = iconW
+        var x = leftW
         return widths.map { w -> RectF(x, 0f, x + w, stripH).also { x += w } }
     }
 
@@ -675,7 +683,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         canvas.drawRoundRect(tmpRect, 20 * d, 20 * d, fillPaint)
         strokePaint.color = theme.keyStroke.withAlpha(0.45f)
         canvas.drawRoundRect(tmpRect, 20 * d, 20 * d, strokePaint)
-        if (look.stripIcons && voiceStatus == null) drawStripIcons(canvas)
+        if (look.stripButtons.isNotEmpty() && voiceStatus == null) drawStripIcons(canvas)
         val status = voiceStatus
         if (status != null) {
             stripPaint.color = theme.stripText
@@ -688,17 +696,23 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun drawStripIcons(canvas: Canvas) {
         val iconColor = theme.stripText.withAlpha(0.55f)
-        // clipboard button
-        if (stripPressed == -1) {
-            fillPaint.color = theme.keyFillPressed
-            canvas.drawCircle(iconW / 2f + 4 * d, stripH / 2f, 17 * d, fillPaint)
+        stripButtonX().forEachIndexed { i, cx ->
+            val type = look.stripButtons[i]
+            if (stripPressed == -10 - i) {
+                fillPaint.color = theme.keyFillPressed
+                canvas.drawCircle(cx, stripH / 2f, 17 * d, fillPaint)
+            }
+            val kind = when (type) {
+                KeyType.MIC -> Icons.Kind.MIC
+                KeyType.GLOBE -> Icons.Kind.GLOBE
+                KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+                KeyType.EMOJI -> Icons.Kind.EMOJI
+                KeyType.TRANSLATE -> Icons.Kind.TRANSLATE
+                else -> Icons.Kind.GEAR
+            }
+            val color = if (type == KeyType.MIC && voiceActive) theme.accent else iconColor
+            Icons.draw(canvas, kind, cx, stripH / 2f, 19 * d, color)
         }
-        Icons.draw(canvas, Icons.Kind.CLIPBOARD, iconW / 2f + 4 * d, stripH / 2f, 19 * d, iconColor)
-        if (stripPressed == 3) {
-            fillPaint.color = theme.keyFillPressed
-            canvas.drawCircle(width - iconW / 2f - 4 * d, stripH / 2f, 17 * d, fillPaint)
-        }
-        Icons.draw(canvas, Icons.Kind.GEAR, width - iconW / 2f - 4 * d, stripH / 2f, 20 * d, iconColor)
     }
 
     private fun drawSuggestions(canvas: Canvas) {
@@ -803,8 +817,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val i = ((x - 8 * d) / (46 * d)).toInt()
             return if (i in emojiResults.indices) 200 + i else -2
         }
-        if (look.stripIcons && x < iconW + 4 * d) return -1
-        if (look.stripIcons && x > width - iconW - 4 * d) return 3
+        if (look.stripButtons.isNotEmpty() && (x < leftW || x > width - rightW)) {
+            val xs = stripButtonX()
+            val i = xs.indices.minByOrNull { abs(xs[it] - x) } ?: return -2
+            return if (abs(xs[i] - x) < btnW * 0.75f) -10 - i else -2
+        }
         if (suggestions.isEmpty()) return -2
         slotRects().forEachIndexed { i, r -> if (x >= r.left && x < r.right) return i }
         return -2
@@ -815,8 +832,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             100 -> listener.onEmojiSearchClose()
             in 300..303 -> listener.onTranslateBar(slot - 300)
             in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
-            -1 -> listener.onClipboardButton()
-            3 -> listener.onSettingsButton()
+            in -15..-10 -> look.stripButtons.getOrNull(-10 - slot)?.let { listener.onStripButton(it) }
             in 0..2 -> {
                 val index = slotOrder()[slot]
                 if (index < suggestions.size) listener.onSuggestion(index)

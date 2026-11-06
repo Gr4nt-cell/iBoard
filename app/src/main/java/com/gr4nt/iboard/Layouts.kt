@@ -45,7 +45,10 @@ object Layouts {
         field: FieldKind,
         showGlobe: Boolean,
         utilityRow: Boolean = true,
+        stripButtons: Set<KeyType> = emptySet(),
     ): KeyboardLayout {
+        val dock = Prefs.DOCK_BUTTONS.filter { it !in stripButtons }.map { Key(it, width = Key.FLEX) }
+        fun free(t: KeyType) = t !in stripButtons
         val rows = mutableListOf<KeyRow>()
         val units = if (lang == "de" || lang == "ar") 11f else 10f
         if (numberRow && page != Page.NUMBER_PAD) rows += KeyRow(numberRowKeys(lang), isNumberRow = true)
@@ -58,8 +61,9 @@ object Layouts {
                 rows += KeyRow(listOf(Key(KeyType.CHAR, "-", 0.9f)) + "456".map(::digit) + Key(KeyType.CHAR, "/", 1.5f))
                 rows += KeyRow(listOf(Key(KeyType.TO_SYMBOLS, "#+=", 0.9f)) + "789".map(::digit) + Key(KeyType.CHAR, "*", 1.5f))
                 rows += KeyRow(listOf(Key(KeyType.TO_LETTERS, "ABC", 0.9f), Key(KeyType.CHAR, ".", 1.2f), digit('0'), Key(KeyType.CHAR, ",", 1.2f), Key(KeyType.RETURN, width = 1.5f)))
-                if (utilityRow) rows += KeyRow(listOf(Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX), Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX), Key(KeyType.TRANSLATE, width = Key.FLEX)), isUtility = true)
-                if (!utilityRow) rows += KeyRow(listOf(Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX)), isUtility = true)
+                if (utilityRow && dock.isNotEmpty()) rows += KeyRow(dock, isUtility = true)
+                if (!utilityRow) listOf(KeyType.GLOBE, KeyType.MIC).filter(::free).map { Key(it, width = Key.FLEX) }
+                    .takeIf { it.isNotEmpty() }?.let { rows += KeyRow(it, isUtility = true) }
                 return KeyboardLayout(rows, 6f, rtl = lang == "ar")
             }
             Page.LETTERS -> {
@@ -96,10 +100,10 @@ object Layouts {
         val bottom = mutableListOf<Key>()
         bottom += if (page == Page.LETTERS) Key(KeyType.TO_NUMBER_PAD, "123", 1.25f)
         else Key(KeyType.TO_LETTERS, if (lang == "ar") "أب" else "ABC", 1.25f)
-        if (!utilityRow) bottom += Key(KeyType.EMOJI, width = 1.1f)
+        if (!utilityRow && free(KeyType.EMOJI)) bottom += Key(KeyType.EMOJI, width = 1.1f)
         // The globe only appears when there's more than one language to switch between.
-        if (showGlobe || !utilityRow) bottom += Key(KeyType.GLOBE, width = 1.1f)
-        if (!utilityRow) bottom += Key(KeyType.MIC, width = 1.1f)
+        if ((showGlobe || !utilityRow) && free(KeyType.GLOBE)) bottom += Key(KeyType.GLOBE, width = 1.1f)
+        if (!utilityRow && free(KeyType.MIC)) bottom += Key(KeyType.MIC, width = 1.1f)
         val comma = if (lang == "ar") "،" else ","
         val left = when (field) {
             FieldKind.EMAIL -> Key(KeyType.CHAR, "@", 1f)
@@ -117,14 +121,7 @@ object Layouts {
         rows += KeyRow(bottom)
 
         // Settings, emoji, globe, mic, clipboard and translator share one Liquid Glass capsule under the keys.
-        if (utilityRow) {
-            val util = mutableListOf(
-                Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
-                Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
-                Key(KeyType.TRANSLATE, width = Key.FLEX),
-            )
-            rows += KeyRow(util, isUtility = true)
-        }
+        if (utilityRow && dock.isNotEmpty()) rows += KeyRow(dock, isUtility = true)
 
         return KeyboardLayout(rows, units, rtl = lang == "ar")
     }
