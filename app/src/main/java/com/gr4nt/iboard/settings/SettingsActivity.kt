@@ -357,8 +357,8 @@ class SettingsActivity : AppCompatActivity() {
             mediaRows.clear()
             com.gr4nt.iboard.emoji.MediaLibrary.Pack.values().forEach { pack ->
                 val lib = com.gr4nt.iboard.emoji.MediaLibrary
-                mediaRows[pack] = navRow(if (pack == lib.Pack.GIFS) Icons.Kind.SPARKLE else Icons.Kind.SMILEY,
-                    if (pack == lib.Pack.GIFS) pink else purple, pack.title, mediaValue(pack)) {
+                mediaRows[pack] = navRow(if (pack == com.gr4nt.iboard.emoji.MediaLibrary.Pack.GIFS) Icons.Kind.SPARKLE else Icons.Kind.SMILEY,
+                    if (pack == com.gr4nt.iboard.emoji.MediaLibrary.Pack.GIFS) pink else purple, pack.title, mediaValue(pack)) {
                     when {
                         lib.progress(pack) != null -> toast("Downloading…")
                         lib.installed(this@SettingsActivity, pack) -> confirm(pack.title, "Remove ${pack.title} from this phone? You can download them again any time.", "Remove") {
