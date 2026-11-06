@@ -47,6 +47,18 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var container: FrameLayout
     private val stack = ArrayList<View>()
     private var statusText: TextView? = null
+    private val mediaRows = HashMap<com.gr4nt.iboard.emoji.MediaLibrary.Pack, TextView>()
+    private val mediaWatcher: () -> Unit = { mediaRows.forEach { (pack, v) -> v.text = mediaValue(pack) } }
+
+    private fun mediaValue(pack: com.gr4nt.iboard.emoji.MediaLibrary.Pack): String {
+        val lib = com.gr4nt.iboard.emoji.MediaLibrary
+        val pc = lib.progress(pack)
+        return when {
+            pc != null -> "$pc%"
+            lib.installed(this, pack) -> "On phone ✓"
+            else -> "Get · ${pack.mb} MB"
+        }
+    }
     private var enableRow: TextView? = null
     private var useRow: TextView? = null
     private val d get() = resources.displayMetrics.density
@@ -341,6 +353,25 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        l.section("Stickers & GIFs", "AURA stickers and animated GIFs for the Stickers and GIFs tabs on the emoji keyboard. Downloaded once from iBoard's GitHub page, then they work offline. Tap one to send it; most chat apps accept them.") {
+            mediaRows.clear()
+            com.gr4nt.iboard.emoji.MediaLibrary.Pack.values().forEach { pack ->
+                val lib = com.gr4nt.iboard.emoji.MediaLibrary
+                mediaRows[pack] = navRow(if (pack == lib.Pack.GIFS) Icons.Kind.SPARKLE else Icons.Kind.SMILEY,
+                    if (pack == lib.Pack.GIFS) pink else purple, pack.title, mediaValue(pack)) {
+                    when {
+                        lib.progress(pack) != null -> toast("Downloading…")
+                        lib.installed(this@SettingsActivity, pack) -> confirm(pack.title, "Remove ${pack.title} from this phone? You can download them again any time.", "Remove") {
+                            lib.remove(this@SettingsActivity, pack)
+                        }
+                        else -> lib.download(this@SettingsActivity, pack) { ok ->
+                            toast(if (ok) "${pack.title} are ready on the emoji keyboard" else "Download failed. Check your connection.")
+                        }
+                    }
+                }
+            }
+        }
+
         l.section("Keys") {
             sliderRow(Icons.Kind.HEIGHT, green, "Key Height", 80, 135, 5, prefs.keyHeight, "%") { putInt(Prefs.KEY_HEIGHT, it) }
             sliderRow(Icons.Kind.TEXT_AA, blue, "Letter Size", 80, 130, 5, prefs.keyTextSize, "%") { putInt(Prefs.KEY_TEXT_SIZE, it) }
@@ -394,7 +425,7 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used to download voice and translation models, and for online dictation when it is on. The microphone is used only when you start dictation.") {
+        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used to download voice and translation models and the optional stickers and GIFs, and for online dictation when it is on. The microphone is used only when you start dictation.") {
             navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet to download voice models (from Hugging Face) and translation language packs (Google ML Kit), and for online dictation. Online dictation sends your voice to your phone's speech service (usually Google) to be transcribed; choose Offline in Dictation Engine to keep it on the phone. Translation runs on this phone and your text is not uploaded. Nothing you type is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
@@ -526,6 +557,17 @@ class SettingsActivity : AppCompatActivity() {
         val fresh = mainPage()
         container.removeView(stack[0]); container.addView(fresh); stack[0] = fresh
         (fresh as? ScrollView)?.post { fresh.scrollTo(0, mainScroll) }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.gr4nt.iboard.emoji.MediaLibrary.watch(mediaWatcher)
+        mediaWatcher()
+    }
+
+    override fun onStop() {
+        com.gr4nt.iboard.emoji.MediaLibrary.unwatch(mediaWatcher)
+        super.onStop()
     }
 
     override fun onResume() {

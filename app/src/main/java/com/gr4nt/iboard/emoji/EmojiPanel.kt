@@ -163,30 +163,55 @@ class EmojiPanel(
         loadData()
     }
 
-    private fun selectTab(i: Int) {
-        listener.onFeedback()
+    private val mediaWatcher: () -> Unit = {
+        val i = tabs.selected
+        if (i != 0 && isAttachedToWindow) {
+            val pack = if (i == 1) MediaLibrary.Pack.GIFS else MediaLibrary.Pack.STICKERS
+            val pc = MediaLibrary.progress(pack)
+            if (pc != null) message.text = "Downloading ${pack.title}… $pc%"
+            else if (MediaLibrary.installed(context, pack) && media.visibility != VISIBLE) selectTab(i, false)
+        }
+    }
+
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); MediaLibrary.watch(mediaWatcher) }
+    override fun onDetachedFromWindow() { MediaLibrary.unwatch(mediaWatcher); super.onDetachedFromWindow() }
+
+    private fun selectTab(i: Int, fromUser: Boolean = true) {
+        if (fromUser) listener.onFeedback()
         tabs.selected = i
         message.visibility = GONE
         if (i == 0) {
             grid.visibility = VISIBLE; media.visibility = GONE
             return
         }
-        grid.visibility = INVISIBLE; media.visibility = VISIBLE
-        val list = ArrayList<MediaItem>()
-        try {
-            if (i == 1) {
-                list += MediaItem(null, "AURA GIFs")
-                MediaLibrary.gifs(context).forEach { list += MediaItem(it) }
-            } else {
-                MediaLibrary.stickerPacks(context).forEach { (pack, items) ->
-                    list += MediaItem(null, pack)
-                    items.forEach { list += MediaItem(it) }
+        grid.visibility = INVISIBLE
+        val pack = if (i == 1) MediaLibrary.Pack.GIFS else MediaLibrary.Pack.STICKERS
+        if (!MediaLibrary.installed(context, pack)) {
+            media.visibility = GONE; message.visibility = VISIBLE
+            val pc = MediaLibrary.progress(pack)
+            message.text = if (pc != null) "Downloading ${pack.title}… $pc%"
+                else "${pack.title} aren't on this phone yet.\n\nTap to download (${pack.mb} MB)"
+            message.setOnClickListener {
+                if (MediaLibrary.progress(pack) == null) {
+                    listener.onFeedback()
+                    MediaLibrary.download(context, pack) { ok ->
+                        if (!ok && tabs.selected == i) message.text = "Download failed. Check your connection and tap to try again."
+                    }
                 }
             }
-        } catch (_: Exception) {
-            media.visibility = GONE; message.visibility = VISIBLE
-            message.text = "Couldn't load " + (if (i == 1) "GIFs" else "stickers")
             return
+        }
+        message.setOnClickListener(null)
+        media.visibility = VISIBLE
+        val list = ArrayList<MediaItem>()
+        if (i == 1) {
+            list += MediaItem(null, "AURA GIFs")
+            MediaLibrary.gifs(context).forEach { list += MediaItem(it) }
+        } else {
+            MediaLibrary.stickerPacks(context).forEach { (name, items) ->
+                list += MediaItem(null, name)
+                items.forEach { list += MediaItem(it) }
+            }
         }
         val cell = if (i == 1) 112 else 84
         mediaLayout.spanCount = (width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).let { (it / (cell * d)).toInt().coerceIn(3, 10) }
