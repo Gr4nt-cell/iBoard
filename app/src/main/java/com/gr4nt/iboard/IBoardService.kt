@@ -80,7 +80,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         keyboard?.voiceActive = message != null
     }
 
+    private var online: com.gr4nt.iboard.voice.OnlineSpeech? = null
+
     private fun cancelVoice() {
+        online?.let { it.cancel(); online = null; currentInputConnection?.finishComposingText() }
         voiceSession++
         voiceModel?.cancel()
         voiceModel = null
@@ -94,6 +97,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun toggleVoice() {
+        online?.let { it.stop(); voiceMessage("Finishing… Tap mic to cancel"); online = null; return }
         if (voiceJob?.isActive == true) {
             if (recorder != null) {
                 recorder?.stop()
@@ -102,13 +106,79 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             } else cancelVoice()
             return
         }
-        if (password || emojiQuery != null) { toast("Dictation is unavailable in this field"); return }
-        if (!prefs.sp.getBoolean("voice_typing", true)) { toast("Enable offline dictation in Settings"); return }
+        if (password || emojiQuery != null || translateBuf != null) { toast("Dictation is unavailable here"); return }
+        if (!prefs.sp.getBoolean("voice_typing", true)) { toast("Enable dictation in Settings"); return }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             startActivity(Intent(this, com.gr4nt.iboard.voice.MicrophonePermissionActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
+        val engine = prefs.sp.getString(com.gr4nt.iboard.voice.OnlineSpeech.PREF, "auto") ?: "auto"
+        val canOnline = com.gr4nt.iboard.voice.OnlineSpeech.available(this)
+        val connected = com.gr4nt.iboard.voice.OnlineSpeech.connected(this)
+        if (engine != "offline" && canOnline && connected) { startOnlineVoice(); return }
+        if (engine == "online") toast(if (!canOnline) "No online speech service on this phone. Using offline dictation." else "No internet connection. Using offline dictation.")
+        startOfflineVoice()
+    }
+
+    /** Online dictation: words appear as you speak; each finished phrase also teaches offline dictation. */
+    private fun startOnlineVoice() {
+        val session = ++voiceSession
+        val connection = currentInputConnection ?: return
+        val language = lang
+        var prefix = ""
+        var composing = false
+        fun prefixNow(): String {
+            val preceding = connection.getTextBeforeCursor(1, 0)?.lastOrNull()
+            return if (preceding != null && !preceding.isWhitespace()) " " else ""
+        }
+        val speech = com.gr4nt.iboard.voice.OnlineSpeech(this, language,
+            onPartial = partial@{ text ->
+                if (session != voiceSession || currentInputConnection !== connection) return@partial
+                if (!composing) { prefix = prefixNow(); composing = true }
+                connection.setComposingText(prefix + text, 1)
+            },
+            onFinal = final@{ text ->
+                if (session != voiceSession || currentInputConnection !== connection) return@final
+                if (!composing) prefix = prefixNow()
+                connection.setComposingText(prefix + text + " ", 1)
+                connection.finishComposingText()
+                composing = false
+                refresh()
+                if (!incognito && prefs.sp.getBoolean(com.gr4nt.iboard.voice.VoiceVocabulary.PREF_LEARN, true)) {
+                    val dict = suggester?.dictionary
+                    com.gr4nt.iboard.voice.VoiceVocabulary.learn(this, language, text) { w -> dict?.contains(w) ?: true }
+                    if (prefs.learnWords) text.split(Regex("\\s+")).map { it.trim { c -> !c.isLetter() } }
+                        .filter { it.length > 1 }.forEach { w -> suggester?.user?.learn(w, null, null) }
+                }
+            },
+            onLevel = {},
+            onEnd = end@{ error ->
+                if (session != voiceSession) return@end
+                if (composing) connection.finishComposingText()
+                online = null
+                voiceMessage(null)
+                if (error != null) {
+                    val offlineReady = com.gr4nt.iboard.voice.SpeechModels.active(this) != null
+                    val net = error == android.speech.SpeechRecognizer.ERROR_NETWORK ||
+                        error == android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
+                        error == android.speech.SpeechRecognizer.ERROR_SERVER
+                    if (net && offlineReady && prefs.sp.getString(com.gr4nt.iboard.voice.OnlineSpeech.PREF, "auto") == "auto") {
+                        toast("Connection lost. Switching to offline dictation.")
+                        startOfflineVoice()
+                    } else toast(when (error) {
+                        android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone access is needed for dictation."
+                        android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "The speech service is busy. Try again in a moment."
+                        else -> if (net) "Online dictation needs a connection." else "Online dictation stopped (error $error)."
+                    })
+                }
+            })
+        if (!speech.start()) { toast("Online dictation isn't available. Using offline dictation."); startOfflineVoice(); return }
+        online = speech
+        voiceMessage("Listening · Tap mic to finish")
+    }
+
+    private fun startOfflineVoice() {
         val session = ++voiceSession
         val connection = currentInputConnection ?: return
         val language = lang
@@ -155,7 +225,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                     }
                     val text = try {
                         withContext(Dispatchers.IO) {
-                            loaded.transcribe(samples, language, com.gr4nt.iboard.voice.WhisperLib.promptFor(language))
+                            loaded.transcribe(samples, language,
+                                if (prefs.sp.getBoolean(com.gr4nt.iboard.voice.VoiceVocabulary.PREF_LEARN, true)) com.gr4nt.iboard.voice.VoiceVocabulary.prompt(this@IBoardService, language)
+                                else com.gr4nt.iboard.voice.WhisperLib.promptFor(language))
                         }
                     } finally { progress.cancel() }
                     if (session != voiceSession || currentInputConnection !== connection || !isInputViewShown) break
@@ -226,6 +298,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         liveBlur?.close()
         clipStore.stop()
         suggester?.user?.save()
+        translator?.close()
         scope.cancel()
         super.onDestroy()
     }
@@ -312,6 +385,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         lastAutoCorrect = null
         spaceAutoInserted = false
         endEmojiSearch()
+        endTranslate()
         closePanels()
         setLanguage(prefs.currentLanguage, rebuild = false)
         updateLayout()
@@ -326,6 +400,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         cancelVoice()
+        endTranslate()
         super.onFinishInputView(finishingInput)
         endEmojiSearch()
         keyboard?.cancelTouches()
@@ -386,7 +461,32 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onKey(key: Key) {
         if (key.type == KeyType.MIC) { toggleVoice(); return }
-        if (voiceJob?.isActive == true) cancelVoice()
+        if (voiceJob?.isActive == true || online != null) cancelVoice()
+        if (key.type == KeyType.TRANSLATE) { if (translateBuf != null) endTranslate() else startTranslate(); return }
+        translateBuf?.let { buf ->
+            when (key.type) {
+                KeyType.CHAR -> {
+                    var c = key.label
+                    if (page == Page.LETTERS && shift != ShiftState.OFF && c.length == 1) c = c.uppercase()
+                    buf.append(c)
+                    if (shift == ShiftState.ON) { shift = ShiftState.OFF; keyboard?.shift = shift }
+                    translateSoon()
+                }
+                KeyType.SPACE -> { buf.append(' '); translateSoon() }
+                KeyType.RETURN -> { if (buf.isEmpty()) onReturn() else commitTranslation() }
+                KeyType.TO_NUMBER_PAD -> setPage(Page.NUMBER_PAD)
+                KeyType.TO_SYMBOLS -> setPage(Page.SYMBOLS)
+                KeyType.TO_LETTERS -> setPage(Page.LETTERS)
+                KeyType.TO_MORE_SYMBOLS -> setPage(Page.MORE_SYMBOLS)
+                KeyType.GLOBE -> nextLanguage()
+                KeyType.EMOJI -> { endTranslate(); showEmoji() }
+                KeyType.CLIPBOARD -> { endTranslate(); showClipboard() }
+                KeyType.SETTINGS -> startActivity(Intent(this, SettingsActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                else -> {}
+            }
+            return
+        }
         if (emojiQuery != null) {
             when (key.type) {
                 KeyType.CHAR -> { emojiQuery!!.append(key.label.lowercase()); searchEmoji() }
@@ -419,6 +519,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onText(text: String) {
+        translateBuf?.let { it.append(text); translateSoon(); return }
         val q = emojiQuery
         if (q != null) { q.append(text.lowercase()); searchEmoji(); return }
         typeText(text)
@@ -435,6 +536,15 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onBackspace(repeat: Int) {
+        translateBuf?.let { buf ->
+            if (buf.isNotEmpty()) {
+                val bi = BreakIterator.getCharacterInstance(); bi.setText(buf.toString())
+                val start = bi.preceding(buf.length).takeIf { it != BreakIterator.DONE } ?: (buf.length - 1)
+                buf.setLength(maxOf(0, if (repeat > 14) buf.trimEnd().lastIndexOf(' ').coerceAtLeast(0) else start))
+                translateSoon()
+                return
+            }
+        }
         emojiQuery?.let { q ->
             if (q.isNotEmpty()) { q.setLength(q.length - 1); searchEmoji() }
             return
@@ -543,6 +653,174 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         feedback(KeyType.CHAR)
         endEmojiSearch()
         showEmoji()
+    }
+
+    // ------------------------------------------------------------ translator
+
+    private var translateBuf: StringBuilder? = null
+    private var translateJob: Job? = null
+    private var translateStatus: String? = null
+    private var detected: String? = null
+    private var translator: com.gr4nt.iboard.translate.TranslatorEngine? = null
+    private val tFrom get() = prefs.sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_FROM, null) ?: lang
+    private val tTo get() = prefs.sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_TO, null) ?: if (lang == "en") "es" else "en"
+
+    private fun showTranslateBar() {
+        val buf = translateBuf ?: run { keyboard?.translate = null; return }
+        val from = if (tFrom == com.gr4nt.iboard.translate.TranslatorEngine.DETECT && detected != null)
+            "${com.gr4nt.iboard.translate.TranslatorEngine.short(detected!!)} ✓" else com.gr4nt.iboard.translate.TranslatorEngine.short(tFrom)
+        keyboard?.translate = KeyboardView.Translate(from, com.gr4nt.iboard.translate.TranslatorEngine.short(tTo), buf.toString(), translateStatus)
+    }
+
+    private fun startTranslate() {
+        if (password) { toast("Translation is unavailable in password fields"); return }
+        endEmojiSearch(); closePanels()
+        currentInputConnection?.finishComposingText()
+        translateBuf = StringBuilder()
+        translateStatus = null; detected = null
+        if (translator == null) translator = com.gr4nt.iboard.translate.TranslatorEngine(applicationContext)
+        if (page != Page.LETTERS) setPage(Page.LETTERS)
+        showTranslateBar()
+        prepareTranslator()
+    }
+
+    /** Downloads the language packs ahead of typing, so the first words translate straight away. */
+    private fun prepareTranslator() {
+        val engine = translator ?: return
+        val from = tFrom.takeIf { it != com.gr4nt.iboard.translate.TranslatorEngine.DETECT } ?: return
+        val to = tTo
+        scope.launch {
+            try {
+                if (!engine.isDownloaded(from, to)) {
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
+                    showTranslateBar()
+                    engine.download(from, to)
+                    translateStatus = null
+                    showTranslateBar()
+                    translateSoon()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (_: Exception) {
+                translateStatus = "Connect to the internet to download this language"
+                showTranslateBar()
+            }
+        }
+    }
+
+    private fun translateSoon() {
+        showTranslateBar()
+        val buf = translateBuf ?: return
+        val text = buf.toString()
+        val connection = currentInputConnection ?: return
+        translateJob?.cancel()
+        if (text.isBlank()) { connection.setComposingText("", 1); detected = null; showTranslateBar(); return }
+        translateJob = scope.launch {
+            delay(250)
+            val engine = translator ?: return@launch
+            try {
+                var from = tFrom
+                if (from == com.gr4nt.iboard.translate.TranslatorEngine.DETECT) {
+                    from = engine.detect(text) ?: detected ?: "en"
+                    detected = from
+                }
+                val to = tTo
+                if (!engine.isDownloaded(from, to)) {
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
+                    showTranslateBar()
+                    engine.download(from, to)
+                }
+                val out = engine.translate(text, from, to)
+                if (translateBuf?.toString() != text || currentInputConnection !== connection) return@launch
+                translateStatus = null
+                connection.setComposingText(out, 1)
+                showTranslateBar()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (_: Exception) {
+                translateStatus = if (com.gr4nt.iboard.voice.OnlineSpeech.connected(this@IBoardService)) "Translation failed" else "Offline: language not downloaded"
+                showTranslateBar()
+            }
+        }
+    }
+
+    /** Keeps the translated text in the app and starts a new sentence in the translator. */
+    private fun commitTranslation() {
+        translateJob?.cancel()
+        val buf = translateBuf ?: return
+        val text = buf.toString()
+        val engine = translator
+        val connection = currentInputConnection ?: return
+        scope.launch {
+            // Make sure the latest text is translated before it is committed.
+            try {
+                if (engine != null && text.isNotBlank()) {
+                    val from = if (tFrom == com.gr4nt.iboard.translate.TranslatorEngine.DETECT) (engine.detect(text) ?: detected ?: "en") else tFrom
+                    if (engine.isDownloaded(from, tTo)) connection.setComposingText(engine.translate(text, from, tTo) + " ", 1)
+                }
+            } catch (_: Exception) {}
+            connection.finishComposingText()
+            translateBuf?.setLength(0)
+            detected = null
+            showTranslateBar()
+        }
+    }
+
+    private fun endTranslate() {
+        translateJob?.cancel()
+        if (translateBuf == null) return
+        currentInputConnection?.finishComposingText()
+        translateBuf = null
+        translateStatus = null
+        keyboard?.translate = null
+        refresh()
+    }
+
+    override fun onTranslateBar(action: Int) {
+        feedback(KeyType.CHAR)
+        when (action) {
+            0 -> pickLanguage(source = true)
+            2 -> pickLanguage(source = false)
+            1 -> {
+                val from = if (tFrom == com.gr4nt.iboard.translate.TranslatorEngine.DETECT) (detected ?: lang) else tFrom
+                setPair(tTo, from)
+            }
+            3 -> endTranslate()
+        }
+    }
+
+    private fun setPair(from: String, to: String) {
+        prefs.sp.edit().putString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_FROM, from)
+            .putString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_TO, to).apply()
+        detected = null; translateStatus = null
+        showTranslateBar()
+        prepareTranslator()
+        translateSoon()
+    }
+
+    private fun pickLanguage(source: Boolean) {
+        val all = com.gr4nt.iboard.translate.TranslatorEngine.languages
+        // The keyboard's own languages first, then everything else.
+        val mine = prefs.languages.filter { it in all }
+        val codes = (if (source) listOf(com.gr4nt.iboard.translate.TranslatorEngine.DETECT) else emptyList()) + mine + all.filter { it !in mine }
+        val names = codes.map { com.gr4nt.iboard.translate.TranslatorEngine.name(it) }.toTypedArray()
+        val current = codes.indexOf(if (source) tFrom else tTo)
+        val ctx = android.view.ContextThemeWrapper(this,
+            if (kbTheme?.dark == true) android.R.style.Theme_DeviceDefault_Dialog_Alert else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+        val dialog = android.app.AlertDialog.Builder(ctx)
+            .setTitle(if (source) "Translate from" else "Translate to")
+            .setSingleChoiceItems(names, current) { d, which ->
+                d.dismiss()
+                val pick = codes[which]
+                if (source) setPair(pick, if (pick == tTo) tFrom.takeIf { it != com.gr4nt.iboard.translate.TranslatorEngine.DETECT } ?: "en" else tTo)
+                else setPair(if (pick == tFrom) tTo else tFrom, pick)
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+        val token = keyboard?.windowToken ?: return
+        dialog.window?.let { w ->
+            w.attributes = w.attributes.apply { this.token = token; type = android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG }
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+        }
+        dialog.show()
     }
 
     // ------------------------------------------------------------ emoji search
@@ -709,7 +987,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun refresh() {
-        if (emojiQuery != null) return
+        if (emojiQuery != null || translateBuf != null) return
         refreshShift()
         refreshSuggestions()
     }

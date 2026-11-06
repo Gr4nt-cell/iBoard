@@ -1,6 +1,6 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_NUMBER_PAD, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, MIC, SPACE, RETURN, CLIPBOARD, SPACER, SETTINGS }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_NUMBER_PAD, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, MIC, SPACE, RETURN, CLIPBOARD, SPACER, SETTINGS, TRANSLATE }
 
 enum class Page { LETTERS, NUMBER_PAD, SYMBOLS, MORE_SYMBOLS }
 
@@ -58,7 +58,7 @@ object Layouts {
                 rows += KeyRow(listOf(Key(KeyType.CHAR, "-", 0.9f)) + "456".map(::digit) + Key(KeyType.CHAR, "/", 1.5f))
                 rows += KeyRow(listOf(Key(KeyType.TO_SYMBOLS, "#+=", 0.9f)) + "789".map(::digit) + Key(KeyType.CHAR, "*", 1.5f))
                 rows += KeyRow(listOf(Key(KeyType.TO_LETTERS, "ABC", 0.9f), Key(KeyType.CHAR, ".", 1.2f), digit('0'), Key(KeyType.CHAR, ",", 1.2f), Key(KeyType.RETURN, width = 1.5f)))
-                if (utilityRow) rows += KeyRow(listOf(Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX), Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX)), isUtility = true)
+                if (utilityRow) rows += KeyRow(listOf(Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX), Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX), Key(KeyType.TRANSLATE, width = Key.FLEX)), isUtility = true)
                 if (!utilityRow) rows += KeyRow(listOf(Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX)), isUtility = true)
                 return KeyboardLayout(rows, 6f, rtl = lang == "ar")
             }
@@ -116,11 +116,12 @@ object Layouts {
         bottom += Key(KeyType.RETURN, width = 2f)
         rows += KeyRow(bottom)
 
-        // Globe, emoji, clipboard and mic share one Liquid Glass capsule under the keys.
+        // Settings, emoji, globe, mic, clipboard and translator share one Liquid Glass capsule under the keys.
         if (utilityRow) {
             val util = mutableListOf(
                 Key(KeyType.SETTINGS, width = Key.FLEX), Key(KeyType.EMOJI, width = Key.FLEX),
                 Key(KeyType.GLOBE, width = Key.FLEX), Key(KeyType.MIC, width = Key.FLEX), Key(KeyType.CLIPBOARD, width = Key.FLEX),
+                Key(KeyType.TRANSLATE, width = Key.FLEX),
             )
             rows += KeyRow(util, isUtility = true)
         }

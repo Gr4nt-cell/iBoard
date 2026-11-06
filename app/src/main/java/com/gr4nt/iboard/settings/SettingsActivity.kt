@@ -297,9 +297,24 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val activeModel = com.gr4nt.iboard.voice.SpeechModels.active(this)
-        l.section("Voice typing & prediction", "Voice models are downloaded once, then dictation works offline. Your voice never leaves this phone.") {
+        val engines = listOf("auto" to "Automatic", "online" to "Online", "offline" to "Offline")
+        val engine = sp.getString(com.gr4nt.iboard.voice.OnlineSpeech.PREF, "auto") ?: "auto"
+        l.section("Voice typing & prediction", "Automatic uses online dictation (your phone's speech service, usually Google) when connected, and the offline Whisper model otherwise. Offline dictation never sends your voice anywhere.") {
             switchRow(Icons.Kind.MIC, blue, "Dictation", sp.getBoolean("voice_typing", true),
-                subtitle = "Whisper · 6 keyboard languages") { putBool("voice_typing", it) }
+                subtitle = "Online + offline Whisper · 6 keyboard languages") { putBool("voice_typing", it) }
+            navRow(Icons.Kind.WAVE, green, "Dictation Engine", engines.first { it.first == engine }.second,
+                subtitle = "Online is more accurate; offline is fully private") {
+                choicePage("Dictation Engine",
+                    listOf("Automatic", "Online", "Offline"), engines.map { it.first },
+                    com.gr4nt.iboard.voice.OnlineSpeech.PREF, "auto",
+                    "Automatic uses online dictation when connected and the offline Whisper model otherwise. Online sends your voice to your phone's speech service (usually Google). Offline keeps it on this phone.")
+            }
+            val vocab = com.gr4nt.iboard.voice.VoiceVocabulary.count(this@SettingsActivity)
+            switchRow(Icons.Kind.SPARKLE, purple, "Improve Offline Dictation", sp.getBoolean(com.gr4nt.iboard.voice.VoiceVocabulary.PREF_LEARN, true),
+                subtitle = if (vocab > 0) "$vocab words learned from online dictation" else "Online dictation teaches Whisper your names and words") {
+                putBool(com.gr4nt.iboard.voice.VoiceVocabulary.PREF_LEARN, it)
+                if (!it) com.gr4nt.iboard.voice.VoiceVocabulary.clear(this@SettingsActivity)
+            }
             navRow(Icons.Kind.MIC, orange, "Voice Model", activeModel?.title ?: "Not downloaded",
                 subtitle = "Download or change the speech model") { voiceModelsPage() }
             navRow(Icons.Kind.MIC, teal, "Microphone Access",
@@ -336,7 +351,18 @@ class SettingsActivity : AppCompatActivity() {
             switchRow(Icons.Kind.KEYBOARD, gray, "Label on Space Bar", prefs.spaceLabel) { putBool(Prefs.SPACE_LABEL, it) }
         }
 
-        l.section("Icon Capsule", "Settings, emoji, languages, microphone and clipboard. All typing and predictions work offline.") {
+        l.section("Translator", "Tap the translate icon in the icon capsule, type in one language and the other appears in the app. Each language is downloaded once (about 30 MB) from Google, then translation runs on this phone, even offline.") {
+            navRow(Icons.Kind.TRANSLATE, blue, "Languages",
+                com.gr4nt.iboard.translate.TranslatorEngine.short(sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_FROM, null) ?: prefs.currentLanguage) + " → " +
+                    com.gr4nt.iboard.translate.TranslatorEngine.short(sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_TO, null) ?: "es"),
+                subtitle = "Change them on the translator bar") {
+                AlertDialog.Builder(this@SettingsActivity).setTitle("Translator")
+                    .setMessage("1. Tap the translate icon (A/文) in the icon capsule.\n2. Pick the languages on the bar that appears.\n3. Type: the translation is written into the app as you type. Return keeps it and starts a new sentence.\n\n${com.gr4nt.iboard.translate.TranslatorEngine.languages.size} languages. Translation uses Google ML Kit on this phone; your text is not uploaded.")
+                    .setPositiveButton("Done", null).show()
+            }
+        }
+
+        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard and translator. Typing and predictions work offline.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
             switchRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", prefs.stripIcons) { putBool(Prefs.STRIP_ICONS, it) }
         }
@@ -368,8 +394,8 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used only to download a voice model you choose. The microphone is used only when you start dictation.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet only to download a voice model you choose (from Hugging Face). Nothing you type or say is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
+        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used to download voice and translation models, and for online dictation when it is on. The microphone is used only when you start dictation.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet to download voice models (from Hugging Face) and translation language packs (Google ML Kit), and for online dictation. Online dictation sends your voice to your phone's speech service (usually Google) to be transcribed; choose Offline in Dictation Engine to keep it on the phone. Translation runs on this phone and your text is not uploaded. Nothing you type is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {

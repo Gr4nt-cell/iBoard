@@ -43,6 +43,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onKeyFeedback(key: Key)
         fun onEmojiResult(text: String)
         fun onEmojiSearchClose()
+        /** Translator bar: 0 = source language, 1 = swap, 2 = target language, 3 = close. */
+        fun onTranslateBar(action: Int)
     }
 
     private val d = resources.displayMetrics.density
@@ -100,7 +102,17 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     // --- geometry ---
     /** The bar grows to two rows (search field + results) while searching emoji. */
-    private val stripH get() = if (emojiQuery != null) 98 * d else (if (compactLandscape) 38 else 48) * d
+    private val stripH get() = if (emojiQuery != null || translate != null) 98 * d else (if (compactLandscape) 38 else 48) * d
+
+    /** Translator bar state; non-null while translating. Typed letters go into [Translate.source]. */
+    data class Translate(val from: String, val to: String, val source: String, val status: String?)
+    var translate: Translate? = null
+        set(v) {
+            val resize = (field == null) != (v == null)
+            field = v
+            if (resize) { requestLayout(); computeKeys() }
+            invalidate()
+        }
 
     /** Non-null while the user is searching emoji; typed letters go into this query. */
     var emojiQuery: String? = null
@@ -267,8 +279,9 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val pressed = isPressed(b)
         if (k.type == KeyType.SPACER) return
         if (layout?.rows?.getOrNull(b.row)?.isUtility == true) {
-            if (pressed || (k.type == KeyType.MIC && voiceActive)) {
-                fillPaint.color = if (k.type == KeyType.MIC && voiceActive) theme.accent.withAlpha(0.18f) else if (theme.dark) 0x33FFFFFF else 0x22000000
+            val on = (k.type == KeyType.MIC && voiceActive) || (k.type == KeyType.TRANSLATE && translate != null)
+            if (pressed || on) {
+                fillPaint.color = if (on) theme.accent.withAlpha(0.18f) else if (theme.dark) 0x33FFFFFF else 0x22000000
                 tmpRect.set(r.left + 4 * d, r.top + 6 * d, r.right - 4 * d, r.bottom - 6 * d)
                 val rr = tmpRect.height() * 0.42f
                 canvas.drawRoundRect(tmpRect, rr, rr, fillPaint)
@@ -279,9 +292,10 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
                 KeyType.EMOJI -> Icons.Kind.EMOJI
                 KeyType.SETTINGS -> Icons.Kind.GEAR
+                KeyType.TRANSLATE -> Icons.Kind.TRANSLATE
                 else -> Icons.Kind.GEAR
             }
-            val color = (if (k.type == KeyType.MIC && voiceActive) theme.accent else theme.keyText).withAlpha(0.9f * alpha)
+            val color = (if (on) theme.accent else theme.keyText).withAlpha(0.9f * alpha)
             Icons.draw(canvas, kind, r.centerX(), r.centerY(), min(r.height() * 0.62f, 26 * d), color)
             return
         }
@@ -563,8 +577,99 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         }
     }
 
+    private fun drawTranslate(canvas: Canvas, tr: Translate) {
+        val rowH = 46 * d
+        val chipH = 32 * d
+        val cy = rowH / 2f + 2 * d
+        val glass = if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
+        stripPaint.typeface = medium
+        stripPaint.textAlign = Paint.Align.CENTER
+        // [ From ▾ ]  ⇄  [ To ▾ ]                (×)
+        val closeX = width - 26 * d
+        val avail = closeX - 22 * d - 8 * d
+        val swapW = 40 * d
+        val chipW = (avail - swapW) / 2f
+        val rects = listOf(RectF(8 * d, cy - chipH / 2, 8 * d + chipW, cy + chipH / 2),
+            RectF(8 * d + chipW + swapW, cy - chipH / 2, 8 * d + 2 * chipW + swapW, cy + chipH / 2))
+        val labels = listOf(tr.from, tr.to)
+        for (i in 0..1) {
+            val r = rects[i]
+            fillPaint.color = if (stripPressed == 300 + i * 2) theme.keyFillPressed else glass
+            canvas.drawRoundRect(r, chipH / 2, chipH / 2, fillPaint)
+            stripPaint.color = theme.stripText
+            val label = TextUtils.ellipsize(labels[i], stripPaint, r.width() - 34 * d, TextUtils.TruncateAt.END).toString()
+            canvas.drawText(label, r.centerX() - 7 * d, baseline(cy, stripPaint), stripPaint)
+            Icons.draw(canvas, Icons.Kind.CHEVRON_DOWN, r.right - 15 * d, cy, 12 * d, theme.keySubText)
+        }
+        val swapCx = rects[0].right + swapW / 2
+        if (stripPressed == 301) { fillPaint.color = theme.keyFillPressed; canvas.drawCircle(swapCx, cy, 15 * d, fillPaint) }
+        Icons.draw(canvas, Icons.Kind.SWAP, swapCx, cy, 18 * d, theme.accent)
+        fillPaint.color = if (stripPressed == 303) theme.keyFillPressed else glass
+        canvas.drawCircle(closeX, cy, 16 * d, fillPaint)
+        strokePaint.color = theme.keyText
+        val old = strokePaint.strokeWidth
+        strokePaint.strokeWidth = 2 * d
+        canvas.drawLine(closeX - 5 * d, cy - 5 * d, closeX + 5 * d, cy + 5 * d, strokePaint)
+        canvas.drawLine(closeX + 5 * d, cy - 5 * d, closeX - 5 * d, cy + 5 * d, strokePaint)
+        strokePaint.strokeWidth = old
+        // Source text field
+        val pillH = 38 * d
+        val top = rowH + (stripH - rowH - pillH) / 2f
+        tmpRect.set(8 * d, top, width - 8 * d, top + pillH)
+        fillPaint.color = glass
+        canvas.drawRoundRect(tmpRect, pillH / 2f, pillH / 2f, fillPaint)
+        val fy = top + pillH / 2f
+        Icons.draw(canvas, Icons.Kind.TRANSLATE, 28 * d, fy, 18 * d, theme.accent)
+        stripPaint.typeface = regular
+        stripPaint.textAlign = Paint.Align.LEFT
+        val tx = 46 * d
+        val right = width - 20 * d
+        if (tr.source.isEmpty()) {
+            stripPaint.color = theme.keySubText
+            val hint = tr.status ?: "Type in ${tr.from}"
+            canvas.drawText(TextUtils.ellipsize(hint, stripPaint, right - tx, TextUtils.TruncateAt.END).toString(), tx, baseline(fy, stripPaint), stripPaint)
+            fillPaint.color = theme.accent
+            canvas.drawRect(tx - 1.5f * d, fy - 10 * d, tx, fy + 10 * d, fillPaint)
+        } else {
+            stripPaint.color = theme.stripText
+            val status = tr.status
+            val statusW = if (status != null) stripPaint.measureText(status) * 0.85f + 12 * d else 0f
+            val shownText = TextUtils.ellipsize(tr.source, stripPaint, right - tx - statusW - 6 * d, TextUtils.TruncateAt.START).toString()
+            canvas.drawText(shownText, tx, baseline(fy, stripPaint), stripPaint)
+            val end = tx + stripPaint.measureText(shownText) + 2 * d
+            fillPaint.color = theme.accent
+            canvas.drawRect(end, fy - 10 * d, end + 1.5f * d, fy + 10 * d, fillPaint)
+            if (status != null) {
+                val oldSize = stripPaint.textSize
+                stripPaint.textSize = oldSize * 0.85f
+                stripPaint.color = theme.keySubText
+                stripPaint.textAlign = Paint.Align.RIGHT
+                canvas.drawText(status, right, baseline(fy, stripPaint), stripPaint)
+                stripPaint.textSize = oldSize
+            }
+        }
+        stripPaint.textAlign = Paint.Align.CENTER
+    }
+
+    private fun translateHit(x: Float, y: Float): Int {
+        val rowH = 46 * d
+        if (y >= rowH) return -2
+        val closeX = width - 26 * d
+        if (x > closeX - 24 * d) return 303
+        val avail = closeX - 22 * d - 8 * d
+        val swapW = 40 * d
+        val chipW = (avail - swapW) / 2f
+        return when {
+            x < 8 * d + chipW -> 300
+            x < 8 * d + chipW + swapW -> 301
+            x < 8 * d + 2 * chipW + swapW -> 302
+            else -> -2
+        }
+    }
+
     private fun drawStrip(canvas: Canvas) {
         emojiQuery?.let { drawEmojiSearch(canvas, it); return }
+        translate?.let { drawTranslate(canvas, it); return }
         tmpRect.set(8 * d, 3 * d, width - 8 * d, stripH - 3 * d)
         fillPaint.color = if (theme.dark) 0x16FFFFFF else 0x4DFFFFFF
         canvas.drawRoundRect(tmpRect, 20 * d, 20 * d, fillPaint)
@@ -690,6 +795,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     }
 
     private fun stripHit(x: Float, y: Float): Int {
+        translate?.let { return translateHit(x, y) }
         if (voiceStatus != null) return -2
         if (emojiQuery != null) {
             val rowH = 50 * d
@@ -707,6 +813,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private fun onStripTap(slot: Int) {
         when (slot) {
             100 -> listener.onEmojiSearchClose()
+            in 300..303 -> listener.onTranslateBar(slot - 300)
             in 200..299 -> emojiResults.getOrNull(slot - 200)?.let { listener.onEmojiResult(it) }
             -1 -> listener.onClipboardButton()
             3 -> listener.onSettingsButton()

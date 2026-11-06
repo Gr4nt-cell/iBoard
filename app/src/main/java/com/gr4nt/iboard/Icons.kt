@@ -8,13 +8,17 @@ import kotlin.math.min
 
 /** Small, crisp line icons drawn in code (SF-Symbols-like weight). */
 object Icons {
-    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN, SEARCH, MIC, SUN, DROP, KEYCAP, SPEAKER, WAVE, EYE_OFF, CHECK, CHEVRON, TEXT_AA, NUM, HEIGHT, CORNER, BOOK, CAPSULE, PALETTE, KEYBOARD, GEAR }
+    enum class Kind { SHIFT, SHIFT_ON, CAPS_LOCK, BACKSPACE, GLOBE, RETURN, EMOJI, CLIPBOARD, SPARKLE, PIN, TRASH, BACK, CLOCK, SMILEY, PAW, FOOD, BALL, CAR, BULB, SYMBOLS, FLAG, KEYBOARD_DOWN, SEARCH, MIC, SUN, DROP, KEYCAP, SPEAKER, WAVE, EYE_OFF, CHECK, CHEVRON, TEXT_AA, NUM, HEIGHT, CORNER, BOOK, CAPSULE, PALETTE, KEYBOARD, GEAR, TRANSLATE, SWAP, CHEVRON_DOWN }
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
     }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val path = Path()
+    private val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+    }
     private val r = RectF()
 
     /** Draws [kind] centered in a square of side [size] around (cx, cy). */
@@ -149,6 +153,31 @@ object Icons {
                 canvas.drawArc(r, 0f, 180f, false, stroke)
                 canvas.drawLine(cx, cy + h * 0.55f, cx, cy + h * 0.9f, stroke)
                 canvas.drawLine(cx - h * 0.3f, cy + h * 0.9f, cx + h * 0.3f, cy + h * 0.9f, stroke)
+            }
+            Kind.TRANSLATE -> {
+                // Two cards: "A" at the back left, "文" at the front right.
+                r.set(cx - h * 0.95f, cy - h * 0.9f, cx + h * 0.25f, cy + h * 0.3f)
+                canvas.drawRoundRect(r, s * 0.1f, s * 0.1f, stroke)
+                glyph.color = color; glyph.textSize = s * 0.42f
+                canvas.drawText("A", r.centerX(), r.centerY() + s * 0.15f, glyph)
+                r.set(cx - h * 0.2f, cy - h * 0.25f, cx + h * 0.95f, cy + h * 0.9f)
+                glyph.textSize = s * 0.38f
+                val sc = canvas.saveLayer(r, null)
+                canvas.drawRoundRect(r, s * 0.1f, s * 0.1f, fill)
+                glyph.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
+                canvas.drawText("文", r.centerX(), r.centerY() + s * 0.13f, glyph)
+                glyph.xfermode = null
+                canvas.restoreToCount(sc)
+            }
+            Kind.SWAP -> {
+                canvas.drawLine(cx - h * 0.8f, cy - h * 0.35f, cx + h * 0.8f, cy - h * 0.35f, stroke)
+                canvas.drawLine(cx + h * 0.8f, cy - h * 0.35f, cx + h * 0.45f, cy - h * 0.7f, stroke)
+                canvas.drawLine(cx + h * 0.8f, cy + h * 0.35f, cx - h * 0.8f, cy + h * 0.35f, stroke)
+                canvas.drawLine(cx - h * 0.8f, cy + h * 0.35f, cx - h * 0.45f, cy + h * 0.7f, stroke)
+            }
+            Kind.CHEVRON_DOWN -> {
+                path.moveTo(cx - h * 0.5f, cy - h * 0.2f); path.lineTo(cx, cy + h * 0.3f); path.lineTo(cx + h * 0.5f, cy - h * 0.2f)
+                canvas.drawPath(path, stroke)
             }
             Kind.GEAR -> {
                 for (i in 0 until 8) {
