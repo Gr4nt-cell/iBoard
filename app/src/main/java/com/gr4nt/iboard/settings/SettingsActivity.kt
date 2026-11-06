@@ -262,7 +262,7 @@ class SettingsActivity : AppCompatActivity() {
     /** Choose which of the six capsule buttons sit on the suggestion bar instead. */
     private fun stripButtonsPage() {
         push(subPage("Suggestion Bar") {
-            section(footer = "Turn a button on to move it from the icon capsule to the suggestion bar; turn it off to put it back in the capsule. Up to ${Prefs.MAX_STRIP_BUTTONS} fit on the suggestion bar.") {
+            section(footer = "Turn a button on to move it from the icon capsule to the suggestion bar; turn it off to put it back in the capsule. Two fit on the suggestion bar: the first sits on the left, the second on the right.") {
                 val tints = listOf(gray, orange, blue, red, yellow, indigo)
                 Prefs.DOCK_BUTTONS.forEachIndexed { i, t ->
                     lateinit var sw: IosSwitch
@@ -270,7 +270,7 @@ class SettingsActivity : AppCompatActivity() {
                         subtitle = null) { on ->
                         if (on && prefs.stripButtons.size >= Prefs.MAX_STRIP_BUTTONS) {
                             sw.isOn = false
-                            toast("Up to ${Prefs.MAX_STRIP_BUTTONS} buttons fit on the suggestion bar")
+                            toast("Only two buttons fit on the suggestion bar. Turn one off first.")
                             return@switchRow
                         }
                         prefs.setOnStrip(t, on)

@@ -34,7 +34,7 @@ class Prefs(context: Context) {
             val saved = sp.getString(STRIP_BUTTONS, null)
                 ?: return if (sp.getBoolean(STRIP_ICONS, false)) listOf(KeyType.CLIPBOARD, KeyType.SETTINGS) else emptyList()
             val set = saved.split(',').mapNotNull { n -> DOCK_BUTTONS.firstOrNull { it.name == n } }.toSet()
-            return DOCK_BUTTONS.filter { it in set }
+            return DOCK_BUTTONS.filter { it in set }.take(MAX_STRIP_BUTTONS)
         }
 
     fun setOnStrip(type: KeyType, onStrip: Boolean) {
@@ -112,7 +112,7 @@ class Prefs(context: Context) {
         const val UTILITY_ROW = "utility_row"
         const val STRIP_ICONS = "strip_icons"
         const val STRIP_BUTTONS = "strip_buttons"
-        const val MAX_STRIP_BUTTONS = 4
+        const val MAX_STRIP_BUTTONS = 2
         /** The six icon-capsule buttons, in capsule order. */
         val DOCK_BUTTONS = listOf(KeyType.SETTINGS, KeyType.EMOJI, KeyType.GLOBE, KeyType.MIC, KeyType.CLIPBOARD, KeyType.TRANSLATE)
         const val ACCENT_COLOR = "accent_color"
