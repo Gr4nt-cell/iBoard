@@ -72,9 +72,15 @@ class LiveKeyboardBlur(
                 setColor(if (theme.dark) 0x24101A30 else 0x24FFFFFF)
             }
             // Bound all four edges, including scale, so a floating keyboard does not blur/tint the rest of the app.
-            window.setBackgroundDrawable(InsetDrawable(pane,
+            window.setBackgroundDrawable(object : InsetDrawable(pane,
                 bounds.left.coerceAtLeast(0), bounds.top.coerceAtLeast(0),
-                (windowWidth - bounds.right).coerceAtLeast(0), (windowHeight - bounds.bottom).coerceAtLeast(0)))
+                (windowWidth - bounds.right).coerceAtLeast(0), (windowHeight - bounds.bottom).coerceAtLeast(0)) {
+                // Insets shape the blur outline only. They must never move/resize IME content.
+                override fun getPadding(padding: Rect): Boolean {
+                    padding.set(0, 0, 0, 0)
+                    return false
+                }
+            })
             runCatching { window.setBackgroundBlurRadius(if (enabled) (32 * density).toInt() else 0) }
         } else window.setBackgroundDrawableResource(android.R.color.transparent)
     }
