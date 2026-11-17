@@ -2,6 +2,8 @@ package com.gr4nt.iboard
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Rect
+import kotlin.math.roundToInt
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.os.Build
@@ -23,10 +25,25 @@ class LiveKeyboardBlur(
     private val density = context.resources.displayMetrics.density
     private var enabled = false
     private val listener = Consumer<Boolean> { value -> enabled = value; update() }
-    private var lastTop = -1
+    private var lastBounds: Rect? = null
+    private var windowWidth = 0
+    private var windowHeight = 0
     private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
-        val xy = IntArray(2);view.getLocationInWindow(xy)
-        if (xy[1] != lastTop) { lastTop = xy[1]; update() }
+        val xy = IntArray(2)
+        view.getLocationInWindow(xy)
+        var scaleX = 1f; var scaleY = 1f
+        var ancestor: View? = view
+        while (ancestor != null) {
+            scaleX *= ancestor.scaleX; scaleY *= ancestor.scaleY
+            ancestor = ancestor.parent as? View
+        }
+        val decor = window.decorView
+        val bounds = Rect(xy[0], xy[1], xy[0] + (view.width * scaleX).roundToInt(), xy[1] + (view.height * scaleY).roundToInt())
+        if (bounds != lastBounds || decor.width != windowWidth || decor.height != windowHeight) {
+            lastBounds = bounds
+            windowWidth = decor.width; windowHeight = decor.height
+            update()
+        }
     }
     init {
         view.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
@@ -43,7 +60,8 @@ class LiveKeyboardBlur(
         gradient.alpha = ((if (enabled) opacity.coerceIn(40, 85) else maxOf(opacity, 90)) * 255) / 100
         view.background = gradient
         if (Build.VERSION.SDK_INT >= 31) {
-            if (lastTop < 0) {
+            val bounds = lastBounds
+            if (bounds == null || bounds.width() <= 0 || bounds.height() <= 0) {
                 window.setBackgroundDrawableResource(android.R.color.transparent)
                 runCatching { window.setBackgroundBlurRadius(0) }
                 return
@@ -53,7 +71,10 @@ class LiveKeyboardBlur(
                 cornerRadii = floatArrayOf(24*density,24*density,24*density,24*density,0f,0f,0f,0f)
                 setColor(if (theme.dark) 0x24101A30 else 0x24FFFFFF)
             }
-            window.setBackgroundDrawable(InsetDrawable(pane, 0, maxOf(0, lastTop), 0, 0))
+            // Bound all four edges, including scale, so a floating keyboard does not blur/tint the rest of the app.
+            window.setBackgroundDrawable(InsetDrawable(pane,
+                bounds.left.coerceAtLeast(0), bounds.top.coerceAtLeast(0),
+                (windowWidth - bounds.right).coerceAtLeast(0), (windowHeight - bounds.bottom).coerceAtLeast(0)))
             runCatching { window.setBackgroundBlurRadius(if (enabled) (32 * density).toInt() else 0) }
         } else window.setBackgroundDrawableResource(android.R.color.transparent)
     }
