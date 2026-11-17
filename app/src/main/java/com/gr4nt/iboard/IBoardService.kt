@@ -41,6 +41,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var root: FrameLayout? = null
+    private var floatingHost: FloatingKeyboardHost? = null
     private var liveBlur: LiveKeyboardBlur? = null
     private var keyboard: KeyboardView? = null
     private var emojiPanel: EmojiPanel? = null
@@ -53,6 +54,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var shift = ShiftState.OFF
     private var fieldKind = FieldKind.TEXT
     private var password = false
+    private var editorSession: EditorSessionKey? = null
+    private var builtLayoutKey = ""
     private var incognito = false
     private var noAutoCorrect = false
     private var ownCaps = true
@@ -314,6 +317,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         window?.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         val kv = KeyboardView(this, this).apply {
             theme = t
+            floatingMode = prefs.floatingKeyboard
             showPreview = prefs.keyPopup
             look = KeyboardView.Look(
                 solid = prefs.keyStyle != "glass",
@@ -327,7 +331,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
         frame.addView(kv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
-            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val nav = if (prefs.floatingKeyboard) 0 else insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             v.setPadding(0, 0, 0, nav)
             insets
         }
@@ -338,7 +342,36 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         emojiPanel = null
         clipPanel = null
         builtSignature = prefs.visualSignature(t.dark)
-        return frame
+        floatingHost = if (prefs.floatingKeyboard) FloatingKeyboardHost(this, frame, t.dark, prefs.sp) {
+            prefs.sp.edit().putBoolean(Prefs.FLOATING_KEYBOARD, false).apply()
+        } else null
+        configureKeyboardWindow()
+        return floatingHost ?: frame
+    }
+
+    private fun configureKeyboardWindow() {
+        window?.window?.let { w ->
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                if (floatingHost != null) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT)
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+        }
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        configureKeyboardWindow()
+    }
+
+    override fun onComputeInsets(outInsets: InputMethodService.Insets) {
+        super.onComputeInsets(outInsets)
+        val host = floatingHost ?: return
+        val decor = window?.window?.decorView ?: return
+        // A floating keyboard overlays the editor instead of resizing it. Only the card consumes touches.
+        outInsets.contentTopInsets = decor.height
+        outInsets.visibleTopInsets = decor.height
+        outInsets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION
+        val bounds = host.touchBounds()
+        outInsets.touchableRegion.set(bounds)
     }
 
     // Keep the app visible on phones and tablets; never switch to the old fullscreen extract editor.
@@ -349,7 +382,16 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         super.onStartInputView(info, restarting)
         clipStore.enabled = prefs.clipboardHistory
         val night = KeyboardTheme.isNight(this, prefs)
-        if (prefs.visualSignature(night) != builtSignature) setInputView(onCreateInputView())
+        val visualChanged = prefs.visualSignature(night) != builtSignature
+        if (visualChanged) setInputView(onCreateInputView())
+        val session = EditorSessionKey(info.packageName, info.fieldId, info.fieldName, info.inputType, info.imeOptions)
+        val sameField = restarting && session.sameField(editorSession)
+        if (InputSessionPolicy.preserve(restarting, editorSession, session, !visualChanged && keyboard?.layout != null)) {
+            // Preserve symbols, manual shift and key positions on secure-editor restarts.
+            if (password) { pendingAutoCorrect = null; show(emptyList()); keyboard?.stopEntranceAnimation() }
+            return
+        }
+        editorSession = session
 
         val cls = info.inputType and InputType.TYPE_MASK_CLASS
         val variation = info.inputType and InputType.TYPE_MASK_VARIATION
@@ -365,6 +407,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             else -> FieldKind.TEXT
         }
         incognito = (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        keyboard?.showPreview = prefs.keyPopup && !password
+        keyboard?.removeCallbacks(refreshRunnable)
         noAutoCorrect = password || fieldKind != FieldKind.TEXT ||
             (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0 ||
             variation == InputType.TYPE_TEXT_VARIATION_PERSON_NAME ||
@@ -391,12 +435,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         setLanguage(prefs.currentLanguage, rebuild = false)
         updateLayout()
         refresh()
-        keyboard?.animateIn()
+        if (!password && !sameField) keyboard?.animateIn() else keyboard?.stopEntranceAnimation()
     }
 
     override fun onFinishInput() {
         cancelVoice()
         clearComposer()
+        editorSession = null
+        keyboard?.removeCallbacks(refreshRunnable)
         super.onFinishInput()
     }
 
@@ -420,7 +466,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             clearComposer()
         }
         keyboard?.removeCallbacks(refreshRunnable)
-        keyboard?.post(refreshRunnable)
+        if (!password) keyboard?.post(refreshRunnable)
     }
 
     private val refreshRunnable = Runnable { refresh() }
@@ -523,11 +569,16 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun updateLayout() {
         val kv = keyboard ?: return
         val info = currentInputEditorInfo
-        kv.layout = Layouts.build(
-            lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
-            utilityRow = prefs.utilityRow,
-            stripButtons = prefs.stripButtons.toSet(),
-        )
+        val layoutKey = listOf(lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
+            prefs.utilityRow, prefs.stripButtons.joinToString()).joinToString("|")
+        if (kv.layout == null || layoutKey != builtLayoutKey) {
+            kv.layout = Layouts.build(
+                lang, page, prefs.numberRow, fieldKind, prefs.languages.size > 1,
+                utilityRow = prefs.utilityRow,
+                stripButtons = prefs.stripButtons.toSet(),
+            )
+            builtLayoutKey = layoutKey
+        }
         kv.languageLabel = Prefs.languageLabel(lang)
         val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
         val noEnterAction = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
@@ -967,6 +1018,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         var text = raw
         if (page == Page.LETTERS && shift != ShiftState.OFF && text.length == 1) text = Layouts.shifted(text, lang)
         if (compose(ic, text)) { lastAutoCorrect = null; afterType(text); return }
+        if (password) {
+            ic.commitText(text, 1)
+            lastAutoCorrect = null
+            afterType(text)
+            return
+        }
         val isPunct = text.length == 1 && text[0] in ".,!?;:)"
         ic.beginBatchEdit()
         if (isPunct) {
@@ -991,7 +1048,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             shift = ShiftState.OFF
             keyboard?.shift = shift
         }
-        if (page != Page.LETTERS && text == "'") setPage(Page.LETTERS)
+        if (!password && page != Page.LETTERS && text == "'") setPage(Page.LETTERS)
     }
 
     /** Replaces the word before the cursor with the pending correction, then adds [separator]. */
@@ -1013,6 +1070,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         // Chinese: space picks the first candidate, like iOS.
         if (pinyin.isNotEmpty()) { ic.beginBatchEdit(); finishComposer(convert = true); ic.endBatchEdit(); return }
         finishComposer()
+        if (password) {
+            ic.commitText(" ", 1)
+            lastAutoCorrect = null
+            spaceAutoInserted = false
+            return
+        }
         val now = SystemClock.uptimeMillis()
         val before = ic.getTextBeforeCursor(3, 0)?.toString() ?: ""
         if (prefs.doubleSpacePeriod && now - lastSpaceAt < 650 && before.length >= 2 &&
@@ -1087,10 +1150,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             val c = before[i - 1]
             if (c.isLetter() || Character.getType(c) == Character.NON_SPACING_MARK.toInt() ||
                 Character.getType(c) == Character.COMBINING_SPACING_MARK.toInt() ||
-                (c == '\'' && i > 1 && before[i - 2].isLetter())
+                (c in "'’" && i > 1 && before[i - 2].isLetter())
             ) i-- else break
         }
-        return before.substring(i).trimStart('\'')
+        return before.substring(i).trimStart('\'', '’')
     }
 
     private fun refresh() {
@@ -1101,7 +1164,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun refreshShift() {
         val kv = keyboard ?: return
-        if (page != Page.LETTERS || lang in Layouts.NO_CASE || shift == ShiftState.LOCKED) return
+        if (password || page != Page.LETTERS || lang in Layouts.NO_CASE || shift == ShiftState.LOCKED) return
         val ic = currentInputConnection ?: return
         val info = currentInputEditorInfo ?: return
         val caps = if (!prefs.autoCap) false else if (ownCaps) {
@@ -1124,13 +1187,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
         val word = currentWord(before)
         val head = before.substring(0, before.length - word.length)
-        val tokens = head.trimEnd().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        val rawPrev = tokens.lastOrNull()?.trim { !it.isLetter() }?.takeIf { it.isNotEmpty() }
-        val trimmedHead = head.trimEnd()
-        val sentenceStart = trimmedHead.isEmpty() || trimmedHead.last() in ".!?\n"
-
-        val prev = if (sentenceStart) null else rawPrev
-        val prev2 = if (sentenceStart) null else tokens.getOrNull(tokens.size - 2)?.trim { !it.isLetter() }
+        val context = com.gr4nt.iboard.predict.PredictionContext.from(head)
+        val sentenceStart = context.sentenceStart
+        val prev = context.previous
+        val prev2 = context.before
         val s = suggester
         val local: List<Suggestion>
         pendingAutoCorrect = null

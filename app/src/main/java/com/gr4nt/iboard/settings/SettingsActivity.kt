@@ -416,6 +416,10 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        l.section("Keyboard Position", "Floating mode lets you drag the keyboard by its top handle. Tap Dock on the floating keyboard to return it to the bottom of the screen.") {
+            switchRow(Icons.Kind.KEYBOARD, blue, "Floating Keyboard", prefs.floatingKeyboard) { putBool(Prefs.FLOATING_KEYBOARD, it) }
+        }
+
         l.section("Keys") {
             sliderRow(Icons.Kind.HEIGHT, green, "Key Height", 80, 135, 5, prefs.keyHeight, "%") { putInt(Prefs.KEY_HEIGHT, it) }
             sliderRow(Icons.Kind.TEXT_AA, blue, "Letter Size", 80, 130, 5, prefs.keyTextSize, "%") { putInt(Prefs.KEY_TEXT_SIZE, it) }

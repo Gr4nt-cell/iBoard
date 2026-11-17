@@ -3,7 +3,7 @@ package com.gr4nt.iboard.predict
 import android.content.Context
 
 /** Corpus-trained, interpolated trigram model; bounded fanout keeps inference off the hot path. */
-class ContextModel private constructor(
+class ContextModel internal constructor(
     private val pairs: Map<String, List<Pair<String, Float>>>,
     private val triples: Map<String, List<Pair<String, Float>>>,
 ) {

@@ -68,6 +68,9 @@ class Suggester(
         }
         dictionary.contextModel.predict(previous, previousPrevious).filter { Dictionary.normalize(it.first).startsWith(norm) }
             .forEach { (word, _) -> add(word, dictionary.score(word) ?: 3f) }
+        if (dictionary.lang == "en") EnglishGrammar.candidates(previous, previousPrevious)
+            .filter { Dictionary.normalize(it).startsWith(norm) && dictionary.contains(it) }
+            .forEach { add(it, dictionary.score(it) ?: 3f) }
         user.prefixed(lower, 5).forEach { (w, c) -> add(w, 3.5f + minOf(c, 30) * 0.15f) }
 
         var corrections = emptyList<Dictionary.Correction>()
@@ -117,24 +120,30 @@ class Suggester(
     }
 
     fun nextWords(previous: String?, sentenceStart: Boolean, previousPrevious: String? = null): List<Suggestion> {
-        val out = LinkedHashSet<String>()
-        user.nextWords(previous, 6, previousPrevious).forEach { out += it.first }
-        if (!sentenceStart) {
-            // Curated greetings remain reliable; the trained model fills in broad conversational contexts.
-            dictionary.contextWords[previous?.lowercase()]?.forEach { out += it.first }
-            dictionary.contextModel.predict(previous, previousPrevious).forEach { out += it.first }
+        val scores = LinkedHashMap<String, Pair<String, Float>>()
+        fun add(word: String, score: Float) {
+            val key = word.lowercase(java.util.Locale.ROOT)
+            val grammar = if (dictionary.lang == "en") EnglishGrammar.adjustment(previous, previousPrevious, word) else 0f
+            val value = score + grammar
+            if (value > (scores[key]?.second ?: Float.NEGATIVE_INFINITY)) scores[key] = word to value
         }
-        if (!sentenceStart) dictionary.contextWords[previous?.lowercase()]?.forEach { out += it.first }
-        if (out.size < 3) {
-            val fallback = if (sentenceStart) STARTERS[dictionary.lang] ?: emptyList()
-            else dictionary.topWords
-            for (w in fallback) {
-                if (out.size >= 3) break
-                if (w.length > 1 || w == "I" || dictionary.lang == "ar") out += w
+        if (sentenceStart) {
+            (STARTERS[dictionary.lang] ?: dictionary.topWords.take(6)).forEachIndexed { i, w -> add(w, 5f - i * .2f) }
+        } else {
+            dictionary.contextWords[previous?.lowercase()]?.forEach { add(it.first, it.second) }
+            dictionary.contextModel.predict(previous, previousPrevious).forEach { add(it.first, it.second * 7f) }
+            user.nextWords(previous, 12, previousPrevious).forEach { (w, count) ->
+                val learned = 2f + kotlin.math.ln(1f + count.coerceAtMost(100)) * .7f
+                add(w, learned)
+            }
+            if (dictionary.lang == "en") EnglishGrammar.candidates(previous, previousPrevious).forEachIndexed { i, w ->
+                if (dictionary.contains(w)) add(w, 2.8f - i * .08f)
             }
         }
-        return out.take(6).map {
-            Suggestion(if (sentenceStart) it.replaceFirstChar { c -> c.titlecase() } else it, Suggestion.Kind.WORD)
+        dictionary.topWords.take(24).forEachIndexed { i, w -> add(w, -2f - i * .05f) }
+        return scores.values.sortedByDescending { it.second }.take(6).map { (word, _) ->
+            val shown = if (dictionary.lang == "en" && word.lowercase() in ENGLISH_I) "I" + word.substring(1) else word
+            Suggestion(if (sentenceStart) shown.replaceFirstChar { it.titlecase() } else shown, Suggestion.Kind.WORD)
         }
     }
 
@@ -144,7 +153,8 @@ class Suggester(
         val tri = user.trigramCount(previousPrevious, previous, word)
         val builtIn = dictionary.contextWords[previous?.lowercase()]?.firstOrNull { it.first.equals(word, true) }?.second ?: 0f
         val context = dictionary.contextModel.predict(previous, previousPrevious).firstOrNull { it.first.equals(word, true) }?.second ?: 0f
-        return context * 4f + minOf(b, 20) * 0.35f + minOf(tri, 10) * 0.65f + minOf(u, 50) * 0.04f + builtIn
+        val grammar = if (dictionary.lang == "en") EnglishGrammar.adjustment(previous, previousPrevious, word) else 0f
+        return context * 5f + minOf(b, 8) * 0.2f + minOf(tri, 6) * 0.4f + minOf(u, 30) * 0.03f + builtIn + grammar
     }
 
     companion object {

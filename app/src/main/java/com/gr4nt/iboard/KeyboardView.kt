@@ -133,8 +133,9 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private val sidePad = 3 * d
     private val keyGap = 6 * d
-    private val splitMode get() = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    private val compactLandscape get() = splitMode && resources.configuration.screenHeightDp < 500
+    var floatingMode = false
+    private val splitMode get() = !floatingMode && resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    private val compactLandscape get() = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE && resources.configuration.screenHeightDp < 500
     private val rowGap get() = (if (compactLandscape) 6 else 10) * d
     private val topPad = 4 * d
     private val bottomPad = 6 * d
@@ -230,6 +231,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             rowBounds += (y - rowGap / 2f) to (y + h + rowGap / 2f)
             y += h + rowGap
         }
+    }
+
+    fun stopEntranceAnimation() {
+        animStart = 0L
+        invalidate()
     }
 
     /** Plays the iOS-27-style "keys slide up" entrance. */

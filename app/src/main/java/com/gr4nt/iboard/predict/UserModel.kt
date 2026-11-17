@@ -4,13 +4,14 @@ import android.content.Context
 import java.io.File
 
 /** Words and word pairs the user actually types, learned on-device and saved per language. */
-class UserModel(private val context: Context, val lang: String) {
+class UserModel(private val directory: File, val lang: String) {
+    constructor(context: Context, lang: String) : this(context.filesDir, lang)
     private val unigrams = HashMap<String, Int>()
     private val bigrams = HashMap<String, HashMap<String, Int>>()
     private val trigrams = HashMap<String, HashMap<String, Int>>()
     private var dirty = false
 
-    private val file: File get() = File(context.filesDir, "user_$lang.tsv")
+    private val file: File get() = File(directory, "user_$lang.tsv")
 
     init {
         try {
@@ -98,7 +99,7 @@ class UserModel(private val context: Context, val lang: String) {
                 val parts = pair.split('|')
                 words.forEach { (w, c) -> sb.append("t\t").append(parts[0]).append('\t').append(parts[1]).append('\t').append(w).append('\t').append(c).append('\n') }
             }
-            val tmp = File(context.filesDir, "user_$lang.tmp")
+            val tmp = File(directory, "user_$lang.tmp")
             tmp.writeText(sb.toString())
             tmp.renameTo(file)
             dirty = false

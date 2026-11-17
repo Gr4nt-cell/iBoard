@@ -11,6 +11,7 @@ class Prefs(context: Context) {
     val theme: String get() = sp.getString(THEME, "system") ?: "system"
     val gradient: String get() = sp.getString(GRADIENT, "blossom") ?: "blossom"
     val numberRow: Boolean get() = sp.getBoolean(NUMBER_ROW, true)
+    val floatingKeyboard: Boolean get() = sp.getBoolean(FLOATING_KEYBOARD, false)
     val keyPopup: Boolean get() = sp.getBoolean(KEY_POPUP, true)
     val haptics: Boolean get() = sp.getBoolean(HAPTICS, true)
     val sound: Boolean get() = sp.getBoolean(SOUND, false)
@@ -85,13 +86,14 @@ class Prefs(context: Context) {
     /** A fingerprint of settings that require rebuilding the keyboard view. */
     fun visualSignature(night: Boolean): String =
         listOf(
-            theme, gradient, numberRow, keyPopup, languages.joinToString(), night, keyStyle, keyRadius,
+            theme, gradient, numberRow, keyPopup, floatingKeyboard, languages.joinToString(), night, keyStyle, keyRadius,
             keyHeight, keyTextSize, uppercaseLabels, spaceLabel, utilityRow, stripButtons.joinToString(), accentColor, bgOpacity, emojiStyle, sp.getLong("emoji_font_stamp", 0L),
         ).joinToString("|")
 
     companion object {
         const val THEME = "theme"
         const val GRADIENT = "gradient"
+        const val FLOATING_KEYBOARD = "floating_keyboard"
         const val NUMBER_ROW = "number_row"
         const val KEY_POPUP = "key_popup"
         const val HAPTICS = "haptics"

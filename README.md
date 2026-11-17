@@ -64,3 +64,13 @@ deadline, concurrent cancellation/close and repeat close.
 deterministic Android audio stubs. These host tests do not replace device testing.
 
 Version 1.0.27 centers a compact utility capsule around its icons instead of stretching it across the screen. Five controls use 44dp touch targets and 8dp gaps (252dp total width). Landscape clusters remain compact inside each keyboard half; the existing speech fixes remain included.
+
+## Context predictions, number pad and floating mode
+
+- Suggestions now combine learned, curated and corpus context instead of always placing learned word pairs first. English ranking checks common subject/verb agreement, auxiliary verb forms, participles, and a/an usage. These are ranking improvements, not a guarantee of complete grammar checking; valid typed words are not silently rewritten. Other languages retain their own local models.
+- Sentence and paragraph boundaries reset prediction context, including non-Latin sentence punctuation.
+- The number pad has direct @ and # keys. Long-press them for / and * respectively (with additional symbols available).
+- Enable Settings > Keyboard Position > Floating Keyboard. Drag the Move header; position is saved. Tap Dock to restore the bottom keyboard. Floating mode uses the input-method window, with touches restricted to the keyboard card, and needs no overlay permission.
+- GitHub Actions runs prediction/layout unit tests before building the next APK and AAB.
+
+Password fields now suppress entrance animation, character previews and automatic shift refresh. Restarts of the same editor preserve the selected page and avoid rebuilding the key geometry. Password characters/spaces are committed without punctuation cleanup or the double-space period shortcut.

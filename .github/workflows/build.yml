@@ -1,4 +1,4 @@
-name: Build iBoard APK
+name: Build iBoard APK and AAB
 
 on:
   push:
@@ -49,6 +49,9 @@ jobs:
             rm -f "$RUNNER_TEMP/upload.jks"
           fi
 
+      - name: Run prediction and layout regression tests
+        run: gradle :app:testReleaseUnitTest --stacktrace
+
       - name: Build APK
         env:
           UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
@@ -58,17 +61,13 @@ jobs:
           set -o pipefail
           gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
 
-      - name: Report build errors on the commit
+      - name: Preserve build failure log
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ERR=$(grep -E "^e: |error:|What went wrong" -A3 build.log | head -60 || true)
-          gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
-            -f body="Build failed:
-          \`\`\`
-          $ERR
-          \`\`\`"
+        uses: actions/upload-artifact@v4
+        with:
+          name: iboard-build-failure
+          path: build.log
+          if-no-files-found: ignore
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk iBoard.apk
@@ -90,7 +89,20 @@ jobs:
           cp app/build/outputs/bundle/release/app-release.aab "$NAME"
           echo "AAB_NAME=$NAME" >> "$GITHUB_ENV"
 
+      - name: Verify release artifacts
+        run: |
+          test -s iBoard.apk
+          test -s "$AAB_NAME"
+          if [ "$AAB_NAME" = "iBoard-signed.aab" ]; then
+            jarsigner -verify "$AAB_NAME"
+          else
+            echo "::notice::AAB is unsigned because no usable upload key was supplied."
+          fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs iBoard.apk
+
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: iBoard-apk
           path: |
@@ -102,8 +114,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest iBoard.apk "$AAB_NAME" \
-            --title "iBoard build #${{ github.run_number }}" \
-            --notes "Automatic build from ${{ github.sha }}. Download iBoard.apk below and install it on your Android phone." \
-            --prerelease --target "${{ github.sha }}"
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "iBoard latest build" --notes "Built automatically." --prerelease --target "${{ github.sha }}"
+          gh release upload latest iBoard.apk "$AAB_NAME" --clobber
+          gh release edit latest --title "iBoard 1.0.${{ github.run_number }}" --notes "Built from ${{ github.sha }}. Context predictions, direct @/# number-pad keys, floating mode and stable password entry. $AAB_NAME"

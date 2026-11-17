@@ -10,7 +10,7 @@ import kotlin.math.min
  * A frequency dictionary loaded from assets/dict/<lang>.txt ("word\tcount" per line).
  * Words are indexed by an accent-free key so "espanol" finds "español".
  */
-class Dictionary private constructor(
+class Dictionary internal constructor(
     val lang: String,
     private val keys: Array<String>,
     private val words: Array<String>,
