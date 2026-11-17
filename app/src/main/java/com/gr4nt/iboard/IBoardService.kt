@@ -386,7 +386,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         if (visualChanged) setInputView(onCreateInputView())
         val session = EditorSessionKey(info.packageName, info.fieldId, info.fieldName, info.inputType, info.imeOptions)
         val sameField = restarting && session.sameField(editorSession)
-        if (InputSessionPolicy.preserve(restarting, editorSession, session, !visualChanged && keyboard?.layout != null)) {
+        if (password && InputSessionPolicy.preserve(restarting, editorSession, session, !visualChanged && keyboard?.layout != null)) {
             // Preserve symbols, manual shift and key positions on secure-editor restarts.
             if (password) { pendingAutoCorrect = null; show(emptyList()); keyboard?.stopEntranceAnimation() }
             return
