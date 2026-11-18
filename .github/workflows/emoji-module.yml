@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m pip install fonttools==4.61.1 Pillow==11.3.0
           sudo apt-get update -qq
-          sudo apt-get install -y libharfbuzz0
+          sudo apt-get install -y libharfbuzz0b
       - name: Test installer and Android font configurations
         run: python modules/aura-emoji/tools/test_module.py
       - name: Rebuild and validate font module
