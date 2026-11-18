@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, hashlib, json, re, shutil, subprocess, zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BASE=Path(__file__).resolve().parents[1]
@@ -44,7 +45,13 @@ def package(root,out):
             z.write(path,Path('TEESimulator')/rel)
         for path in BASE.rglob('*'):
             if path.is_file() and '__pycache__' not in path.parts:z.write(path,Path('aura-integration')/path.relative_to(BASE))
-    report={'private_keybox_bundled':False,'abis':['arm64-v8a','armeabi-v7a','x86_64','x86'],
+    results=list((root/'app/build/test-results/testReleaseUnitTest').glob('TEST-*.xml'))
+    counts={'tests':0,'failures':0,'errors':0,'skipped':0}
+    for result in results:
+        suite=ET.parse(result).getroot()
+        for key in counts:counts[key]+=int(suite.get(key,'0'))
+    assert counts['tests']>=8 and counts['failures']==0 and counts['errors']==0 and counts['skipped']==0,counts
+    report={'credential_unit_tests':counts,'private_keybox_bundled':False,'abis':['arm64-v8a','armeabi-v7a','x86_64','x86'],
             'actual_google_verdict':'UNTESTED; authorized external credentials and a live device are required',
             'upstream':json.loads((root/'module/PROVENANCE.json').read_text()),'sha256':{}}
     for file in [target,source]:report['sha256'][file.name]=hashlib.sha256(file.read_bytes()).hexdigest()

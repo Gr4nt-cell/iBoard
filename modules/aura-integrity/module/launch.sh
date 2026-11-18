@@ -7,6 +7,12 @@ status() { printf '%s\n' "$1" > "$CFG/status.txt"; chmod 0600 "$CFG/status.txt";
 [ -f "$CFG/enabled" ] || { status 'INACTIVE: press module Action after configuring your authorized keybox.'; exit 0; }
 [ -s "$CFG/keybox.xml" ] && [ ! -L "$CFG/keybox.xml" ] || { status 'INACTIVE: authorized keybox.xml is missing or is a symlink.'; exit 0; }
 [ ! -L "$CFG/target.txt" ] && [ ! -L "$CFG/security_patch.txt" ] || { status 'INACTIVE: configuration symlinks are not supported.'; exit 1; }
+# This runs in late-start background service, never in a blocking boot stage.
+boot_wait=0
+while [ "$(getprop sys.boot_completed)" != 1 ] && [ "$boot_wait" -lt 30 ]; do
+    sleep 2
+    boot_wait=$((boot_wait + 1))
+done
 for module in /data/adb/modules/*; do
     [ "$module" = "$MODDIR" ] && continue
     [ -f "$module/disable" ] || [ -f "$module/remove" ] && continue

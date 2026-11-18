@@ -48,13 +48,15 @@ jobs:
         run: python aura/modules/aura-integrity/tools/package.py engine out
       - name: Prepare Android runtime check
         run: |
-          python -m pip install cryptography==45.0.6
+          python -m venv "$RUNNER_TEMP/aura-ci-python"
+          "$RUNNER_TEMP/aura-ci-python/bin/pip" install cryptography==45.0.6
+          echo "$RUNNER_TEMP/aura-ci-python/bin" >> "$GITHUB_PATH"
           (cd engine && ./gradlew --stop)
           sudo chmod 666 /dev/kvm
-      - name: Test credential runtime on Android 17
+      - name: Test credential runtime on Android 16
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37
+          api-level: 36
           target: google_apis
           arch: x86_64
           profile: pixel_7
