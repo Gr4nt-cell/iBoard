@@ -24,7 +24,9 @@ if run_validator "$remote/missing.xml" "$remote/roots.json" > "$fixture/missing.
 fi
 grep -q 'INACTIVE:' "$fixture/missing.log"
 # This uses an ephemeral TEST root purely to exercise Android TLS, XML, and crypto APIs.
-run_validator "$remote/keybox-fixture.xml" "$remote/fixture-roots.json" > "$fixture/local.log"
+if ! run_validator "$remote/keybox-fixture.xml" "$remote/fixture-roots.json" > "$fixture/local.log"; then
+    cat "$fixture/local.log";exit 1
+fi
 grep -q 'LOCAL_CREDENTIAL_CHECKS_PASSED' "$fixture/local.log"
 # The production root set must reject those same software-only credentials.
 if run_validator "$remote/keybox-fixture.xml" "$remote/roots.json" > "$fixture/untrusted.log"; then

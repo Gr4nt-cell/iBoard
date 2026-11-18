@@ -154,7 +154,12 @@ public final class AuraKeyboxValidator {
         } catch(CertificateExpiredException | CertificateNotYetValidException failure) {
             System.out.println("INACTIVE: CERTIFICATE_VALIDITY_FAILURE");System.exit(2);
         } catch(Exception failure) {
-            System.out.println("INACTIVE: VALIDATION_FAILED. No key or certificate contents were logged.");System.exit(2);
+            System.out.println("INACTIVE: VALIDATION_FAILED. No key or certificate contents were logged.");
+            for(Throwable cause=failure;cause!=null;cause=cause.getCause()) {
+                System.out.println("Failure type: "+cause.getClass().getName());
+                for(StackTraceElement frame:cause.getStackTrace())System.out.println("  at "+frame);
+            }
+            System.exit(2);
         }
     }
 }
