@@ -24,7 +24,7 @@ public class AuraKeyboxValidatorTest {
         KeyPair root,pair;X509Certificate rootCert,cert;String xml,roots;
         Fixture(boolean rsa,boolean expired,boolean mismatch) throws Exception {
             Security.addProvider(new BouncyCastleProvider());
-            KeyPairGenerator generator=KeyPairGenerator.getInstance(rsa?"RSA":"EC");generator.initialize(rsa?2048:256);
+            KeyPairGenerator generator=KeyPairGenerator.getInstance(rsa?"RSA":"EC","BC");generator.initialize(rsa?2048:256);
             root=generator.generateKeyPair();pair=generator.generateKeyPair();
             long now=System.currentTimeMillis();String alg=rsa?"SHA256withRSA":"SHA256withECDSA";
             X500Name name=new X500Name("CN=Generated Unit Test Root");

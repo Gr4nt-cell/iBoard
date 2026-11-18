@@ -51,6 +51,7 @@ def prepare(root):
     text=text.replace('    defaultConfig {','    defaultConfig {\n        externalNativeBuild { cmake { arguments += "-DANDROID_STL=c++_static" } }',1)
     text=text.replace('dependencies {','dependencies {\n    testImplementation("junit:junit:4.13.2")\n    testImplementation("org.json:json:20240303")',1)
     # XML APIs are part of Android; regular JVM tests use the host JAXP implementation.
+    text+='\ntasks.withType<org.gradle.api.tasks.testing.Test>().configureEach { testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL } }\n'
     gradle.write_text(text)
     with urllib.request.urlopen('https://android.googleapis.com/attestation/root',timeout=20) as response: data=response.read(262145)
     assert len(data)<=262144,'Oversized public root list'
