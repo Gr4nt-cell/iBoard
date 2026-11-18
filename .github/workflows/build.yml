@@ -3,6 +3,9 @@ name: Build iBoard APK and AAB
 on:
   push:
     branches: [main, gpt]
+    paths-ignore:
+      - 'modules/aura-emoji/**'
+      - '.github/workflows/emoji-module.yml'
   workflow_dispatch:
 
 permissions:

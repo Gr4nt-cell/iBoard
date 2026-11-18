@@ -1,0 +1,51 @@
+name: AURA Emoji Magisk module
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/aura-emoji/**'
+      - '.github/workflows/emoji-module.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: aura-emoji-module
+  cancel-in-progress: true
+jobs:
+  module:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            modules/aura-emoji
+            releases/aura-emoji-3.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install validation tools
+        run: |
+          python -m pip install fonttools==4.61.1 Pillow==11.3.0
+          sudo apt-get update -qq
+          sudo apt-get install -y libharfbuzz0
+      - name: Test installer and Android font configurations
+        run: python modules/aura-emoji/tools/test_module.py
+      - name: Rebuild and validate font module
+        run: |
+          python modules/aura-emoji/tools/build.py --font releases/aura-emoji-3.0/AURA-Emoji-Full.ttf --legacy releases/aura-emoji-3.0/AURA-Emoji-Magisk.zip --output out
+          cp modules/aura-emoji/README.md out/README.md
+          cat out/SHA256SUMS.txt
+      - name: Upload module artifact
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: AURA-Emoji-Magisk-4.0
+          path: out/*
+          retention-days: 7
+      - name: Publish module release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=aura-emoji-v4.0.0
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "${{ github.sha }}" --title "AURA Emoji Magisk 4.0" --notes-file modules/aura-emoji/README.md
+          gh release upload "$TAG" out/AURA-Emoji-Magisk-4.0.zip out/SHA256SUMS.txt out/build-report.json out/README.md --clobber
