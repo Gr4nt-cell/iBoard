@@ -27,3 +27,9 @@ The build pins TEESimulator and its LSPlt submodule, publishes a corresponding-s
 Google roots: https://android.googleapis.com/attestation/root
 Revocation data: https://android.googleapis.com/attestation/status
 Official verification guidance: https://developer.android.com/privacy-and-security/security-key-attestation
+
+## Google server refresh
+
+Before each activation, the module refreshes Google's public attestation trust roots over HTTPS from `https://android.googleapis.com/attestation/root`. It also fetches the public revocation list from `https://android.googleapis.com/attestation/status` during credential validation. An unavailable endpoint or invalid response prevents activation. Refreshed public roots are stored privately at `/data/adb/aura_integrity/roots.json`. The bundled root snapshot remains available for inspection but is not used as a silent fallback for a failed refresh.
+
+These public endpoints do not distribute private keyboxes. Google's Remote Key Provisioning issues certificates for keys generated inside supported secure hardware; it is not a downloadable Magisk keybox service. No keybox search, harvesting, extraction, or third-party key source is included. Your authorized private credential remains local.

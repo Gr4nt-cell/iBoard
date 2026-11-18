@@ -1,5 +1,6 @@
 #!/system/bin/sh
 MODDIR=$1
+umask 077
 CFG=/data/adb/aura_integrity
 mkdir -p "$CFG"
 chmod 0700 "$CFG"
@@ -32,8 +33,15 @@ if [ -f "$CFG/engine.pid" ]; then
 fi
 chown 0:0 "$CFG/keybox.xml"
 chmod 0600 "$CFG/keybox.xml"
+# Refresh Google public trust roots before validation. Never retrieve private keyboxes.
+if ! /system/bin/app_process -Djava.class.path="$MODDIR/classes.dex" "$MODDIR" org.matrix.TEESimulator.AuraKeyboxValidator --refresh-roots "$CFG/roots.json" > "$CFG/check.tmp" 2>/dev/null; then
+    mv -f "$CFG/check.tmp" "$CFG/status.txt"
+    chmod 0600 "$CFG/status.txt"
+    exit 1
+fi
+chmod 0600 "$CFG/roots.json"
 # Only public revocation status is downloaded. Key material never leaves this device.
-if ! /system/bin/app_process -Djava.class.path="$MODDIR/classes.dex" "$MODDIR" org.matrix.TEESimulator.AuraKeyboxValidator "$CFG/keybox.xml" "$MODDIR/roots.json" > "$CFG/check.tmp" 2>/dev/null; then
+if ! /system/bin/app_process -Djava.class.path="$MODDIR/classes.dex" "$MODDIR" org.matrix.TEESimulator.AuraKeyboxValidator "$CFG/keybox.xml" "$CFG/roots.json" > "$CFG/check.tmp" 2>/dev/null; then
     mv -f "$CFG/check.tmp" "$CFG/status.txt"
     chmod 0600 "$CFG/status.txt"
     exit 1

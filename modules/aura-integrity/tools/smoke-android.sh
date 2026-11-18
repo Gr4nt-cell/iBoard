@@ -18,6 +18,11 @@ adb push "$fixture/." "$remote/" >/dev/null
 run_validator() {
     adb shell /system/bin/app_process -Djava.class.path="$remote/classes.dex" "$remote" org.matrix.TEESimulator.AuraKeyboxValidator "$1" "$2"
 }
+# Exercise live public Google trust refresh; no private identities are fetched.
+if ! run_validator --refresh-roots "$remote/refreshed-roots.json" > "$fixture/refresh.log"; then
+    cat "$fixture/refresh.log";exit 1
+fi
+cat "$fixture/refresh.log"
 # Missing keys must fail before any network operation or native hook startup.
 if run_validator "$remote/missing.xml" "$remote/roots.json" > "$fixture/missing.log"; then
     echo 'Missing credentials unexpectedly accepted';exit 1

@@ -114,7 +114,10 @@ public final class AuraKeyboxValidator {
         }
     }
     static String currentRevocations() throws Exception {
-        HttpsURLConnection connection=(HttpsURLConnection)new URL("https://android.googleapis.com/attestation/status").openConnection();
+        return publicDocument("https://android.googleapis.com/attestation/status",10*1024*1024);
+    }
+    static String publicDocument(String url,int maxBytes) throws Exception {
+        HttpsURLConnection connection=(HttpsURLConnection)new URL(url).openConnection();
         connection.setConnectTimeout(10000);connection.setReadTimeout(10000);connection.setInstanceFollowRedirects(false);
         try {
             require(connection.getResponseCode()==200,"REVOCATION_NETWORK_FAILURE");
@@ -122,7 +125,7 @@ public final class AuraKeyboxValidator {
             try(InputStream input=connection.getInputStream()) {
                 byte[] buffer=new byte[8192];int count;
                 while((count=input.read(buffer))!=-1) {
-                    require(bytes.size()+count<=10*1024*1024,"REVOCATION_RESPONSE_TOO_LARGE");bytes.write(buffer,0,count);
+                    require(bytes.size()+count<=maxBytes,"REVOCATION_RESPONSE_TOO_LARGE");bytes.write(buffer,0,count);
                 }
             }
             return bytes.toString("UTF-8");
@@ -144,6 +147,24 @@ public final class AuraKeyboxValidator {
     public static void main(String[] args) {
         try {
             require(args.length==2,"INVALID_ARGUMENTS");
+            if("--refresh-roots".equals(args[0])) {
+                prepareAndroidEnvironment();
+                String roots=publicDocument("https://android.googleapis.com/attestation/root",262144);
+                JSONArray values=new JSONArray(roots);
+                require(values.length()>0 && values.length()<=32,"INVALID_TRUST_ROOTS");
+                for(int i=0;i<values.length();i++) {
+                    X509Certificate root=certificate(values.getString(i));
+                    require(root.getBasicConstraints()>=0,"INVALID_TRUST_ROOTS");
+                }
+                File destination=new File(args[1]);
+                require(!Files.isSymbolicLink(destination.toPath()),"INVALID_INPUT_FILE");
+                File temporary=new File(destination.getPath()+".tmp");
+                require(!Files.isSymbolicLink(temporary.toPath()),"INVALID_INPUT_FILE");
+                Files.write(temporary.toPath(),roots.getBytes(StandardCharsets.UTF_8));
+                Files.move(temporary.toPath(),destination.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                System.out.println("PUBLIC_ROOTS_REFRESHED: public certificates only; no private keybox downloaded.");
+                return;
+            }
             String key=read(new File(args[0]),262144);
             String roots=read(new File(args[1]),262144);
             prepareAndroidEnvironment();
