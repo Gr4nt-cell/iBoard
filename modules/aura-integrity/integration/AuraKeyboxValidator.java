@@ -163,13 +163,14 @@ public final class AuraKeyboxValidator {
                 Files.write(temporary.toPath(),roots.getBytes(StandardCharsets.UTF_8));
                 Files.move(temporary.toPath(),destination.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 System.out.println("PUBLIC_ROOTS_REFRESHED: public certificates only; no private keybox downloaded.");
-                return;
+                System.exit(0);
             }
             String key=read(new File(args[0]),262144);
             String roots=read(new File(args[1]),262144);
             prepareAndroidEnvironment();
             validate(key,roots,currentRevocations());
             System.out.println("LOCAL_CREDENTIAL_CHECKS_PASSED: Google verdict remains untested.");
+            System.exit(0);
         } catch(Rejected failure) {
             System.out.println("INACTIVE: "+failure.code);System.exit(2);
         } catch(CertificateExpiredException | CertificateNotYetValidException failure) {

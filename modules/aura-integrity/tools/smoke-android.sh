@@ -20,7 +20,7 @@ adb shell mkdir -p "$remote"
 adb shell chmod 700 "$remote"
 adb push "$fixture/." "$remote/" >/dev/null
 run_validator() {
-    adb shell /system/bin/app_process -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18743 -Djava.class.path="$remote/classes.dex" "$remote" org.matrix.TEESimulator.AuraKeyboxValidator "$1" "$2"
+    timeout 90s adb shell /system/bin/app_process -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18743 -Djava.class.path="$remote/classes.dex" "$remote" org.matrix.TEESimulator.AuraKeyboxValidator "$1" "$2"
 }
 # Exercise live public Google trust refresh; no private identities are fetched.
 if ! run_validator --refresh-roots "$remote/refreshed-roots.json" > "$fixture/refresh.log"; then
