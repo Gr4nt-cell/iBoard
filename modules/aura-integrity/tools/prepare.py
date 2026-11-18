@@ -22,6 +22,21 @@ def prepare(root):
                 path.write_text(text.replace('/data/adb/tricky_store','/data/adb/aura_integrity'))
                 changes.append(str(path.relative_to(root)))
     assert changes,'Expected upstream configuration path was not found'
+    helper=root/'app/src/main/java/org/matrix/TEESimulator/pki/CertificateHelper.kt'
+    text=helper.read_text();start=text.index('    fun parsePemKeyPair(');brace=text.index('{',start)
+    depth=1;end=brace+1
+    while depth:
+        if text[end]=='{':depth+=1
+        if text[end]=='}':depth-=1
+        end+=1
+    text=text[:start]+"""    fun parsePemKeyPair(pemContent: String): OperationResult<KeyPair> {
+        return try {
+            OperationResult.Success(org.matrix.TEESimulator.AuraKeyboxValidator.parseKeyPair(pemContent))
+        } catch (e: Exception) {
+            OperationResult.Error("Failed to parse private key", e)
+        }
+    }"""+text[end:]
+    helper.write_text(text);changes.append(str(helper.relative_to(root)))
     # Disable verbose/debug logs without modifying the protocol or cryptographic implementation.
     logger=root/'app/src/main/java/org/matrix/TEESimulator/logging/SystemLogger.kt'
     text=logger.read_text().replace('Log.d(TAG, message)','Unit').replace('Log.v(TAG, message)','Unit')

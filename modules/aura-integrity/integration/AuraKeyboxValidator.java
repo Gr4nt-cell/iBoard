@@ -36,6 +36,30 @@ public final class AuraKeyboxValidator {
         require(list.getLength()==1,"INVALID_KEYBOX_STRUCTURE");
         return list.item(0).getTextContent().trim();
     }
+    public static KeyPair parseKeyPair(String pem) throws Exception {
+        if(!(Security.getProvider("BC") instanceof BouncyCastleProvider)) {
+            Security.removeProvider("BC");Security.addProvider(new BouncyCastleProvider());
+        }
+        PrivateKey privateKey;
+        try(PEMParser parser=new PEMParser(new StringReader(pem))) {
+            Object object=parser.readObject();
+            JcaPEMKeyConverter converter=new JcaPEMKeyConverter().setProvider("BC");
+            if(object instanceof PEMKeyPair)privateKey=converter.getPrivateKey(((PEMKeyPair)object).getPrivateKeyInfo());
+            else if(object instanceof PrivateKeyInfo)privateKey=converter.getPrivateKey((PrivateKeyInfo)object);
+            else throw new Rejected("INVALID_PRIVATE_KEY");
+        }
+        PublicKey publicKey;
+        if(privateKey instanceof java.security.interfaces.RSAPrivateCrtKey) {
+            java.security.interfaces.RSAPrivateCrtKey rsa=(java.security.interfaces.RSAPrivateCrtKey)privateKey;
+            publicKey=KeyFactory.getInstance("RSA","BC").generatePublic(new java.security.spec.RSAPublicKeySpec(rsa.getModulus(),rsa.getPublicExponent()));
+        } else if(privateKey instanceof org.bouncycastle.jce.interfaces.ECPrivateKey) {
+            org.bouncycastle.jce.interfaces.ECPrivateKey ec=(org.bouncycastle.jce.interfaces.ECPrivateKey)privateKey;
+            org.bouncycastle.jce.spec.ECParameterSpec parameters=ec.getParameters();
+            require(parameters!=null,"MISSING_CURVE_PARAMETERS");
+            publicKey=KeyFactory.getInstance("EC","BC").generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(parameters.getG().multiply(ec.getD()).normalize(),parameters));
+        } else throw new Rejected("UNSUPPORTED_KEY_TYPE");
+        return new KeyPair(publicKey,privateKey);
+    }
     public static void validate(String xml,String rootJson,String statusJson) throws Exception {
         require(xml.length()<=262144,"KEYBOX_TOO_LARGE");
         String lower=xml.toLowerCase(Locale.ROOT);
@@ -59,14 +83,7 @@ public final class AuraKeyboxValidator {
         require(keys.getLength()>0 && keys.getLength()<=8,"INVALID_KEY_COUNT");
         for(int i=0;i<keys.getLength();i++) {
             Element key=(Element)keys.item(i);
-            PrivateKey privateKey;
-            try(PEMParser parser=new PEMParser(new StringReader(child(key,"PrivateKey")))) {
-                Object object=parser.readObject();
-                JcaPEMKeyConverter converter=new JcaPEMKeyConverter().setProvider("BC");
-                if(object instanceof PEMKeyPair)privateKey=converter.getKeyPair((PEMKeyPair)object).getPrivate();
-                else if(object instanceof PrivateKeyInfo)privateKey=converter.getPrivateKey((PrivateKeyInfo)object);
-                else throw new Rejected("INVALID_PRIVATE_KEY");
-            }
+            PrivateKey privateKey=parseKeyPair(child(key,"PrivateKey")).getPrivate();
             NodeList nodes=key.getElementsByTagName("Certificate");
             require(nodes.getLength()>0 && nodes.getLength()<=8,"INVALID_CERTIFICATE_CHAIN");
             List<X509Certificate> chain=new ArrayList<>();
@@ -111,11 +128,25 @@ public final class AuraKeyboxValidator {
             return bytes.toString("UTF-8");
         } finally {connection.disconnect();}
     }
+    static void prepareAndroidEnvironment() throws Exception {
+        // app_process does not bind an application automatically. TLS/Keystore APIs need a context.
+        if(android.os.Looper.getMainLooper()==null) android.os.Looper.prepareMainLooper();
+        Class<?> threadClass=Class.forName("android.app.ActivityThread");
+        java.lang.reflect.Method systemMain=threadClass.getDeclaredMethod("systemMain");systemMain.setAccessible(true);
+        Object thread=systemMain.invoke(null);
+        java.lang.reflect.Method contextMethod=threadClass.getDeclaredMethod("getSystemContext");contextMethod.setAccessible(true);
+        android.content.Context context=(android.content.Context)contextMethod.invoke(thread);
+        android.app.Application app=new android.app.Application();
+        java.lang.reflect.Method attach=android.content.ContextWrapper.class.getDeclaredMethod("attachBaseContext",android.content.Context.class);
+        attach.setAccessible(true);attach.invoke(app,context);
+        java.lang.reflect.Field initial=threadClass.getDeclaredField("mInitialApplication");initial.setAccessible(true);initial.set(thread,app);
+    }
     public static void main(String[] args) {
         try {
             require(args.length==2,"INVALID_ARGUMENTS");
             String key=read(new File(args[0]),262144);
             String roots=read(new File(args[1]),262144);
+            prepareAndroidEnvironment();
             validate(key,roots,currentRevocations());
             System.out.println("LOCAL_CREDENTIAL_CHECKS_PASSED: Google verdict remains untested.");
         } catch(Rejected failure) {

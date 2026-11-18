@@ -55,6 +55,16 @@ public class AuraKeyboxValidatorTest {
     @Test public void arbitraryRootRejected() throws Exception {
         Fixture f=new Fixture(false,false,false);f.roots=new Fixture(false,false,false).roots;rejected(f,"{\"entries\":{}}","UNTRUSTED_ATTESTATION_ROOT");
     }
+    @Test public void pkcs8EcAndRsaKeysSupportedByBackendImporter() throws Exception {
+        for(boolean rsa:new boolean[]{false,true}) {
+            Fixture f=new Fixture(rsa,false,false);
+            String encoded="-----BEGIN PRIVATE KEY-----\n"+Base64.getMimeEncoder(64,new byte[]{'\n'}).encodeToString(f.pair.getPrivate().getEncoded())+"\n-----END PRIVATE KEY-----\n";
+            KeyPair imported=AuraKeyboxValidator.parseKeyPair(encoded);
+            Signature signer=Signature.getInstance(rsa?"SHA256withRSA":"SHA256withECDSA");
+            signer.initSign(imported.getPrivate());signer.update(new byte[]{1,2,3});byte[] proof=signer.sign();
+            signer.initVerify(f.cert.getPublicKey());signer.update(new byte[]{1,2,3});assertTrue(signer.verify(proof));
+        }
+    }
     @Test public void externalXmlEntitiesRejected() throws Exception {
         try {AuraKeyboxValidator.validate("<!DOCTYPE x [<!ENTITY x SYSTEM 'file:///private'>]><AndroidAttestation/>","[]","{}");fail();}
         catch(AuraKeyboxValidator.Rejected expected) {assertEquals("UNSAFE_XML",expected.getMessage());}
