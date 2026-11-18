@@ -2,7 +2,8 @@
 set -euo pipefail
 fixture=$(mktemp -d)
 remote=/data/local/tmp/aura-integrity-ci
-trap 'adb shell rm -rf "$remote" >/dev/null 2>&1 || true; rm -rf "$fixture"' EXIT
+relay_pid=
+trap '[ -z "$relay_pid" ] || kill "$relay_pid" 2>/dev/null || true; adb reverse --remove tcp:18743 >/dev/null 2>&1 || true; adb shell rm -rf "$remote" >/dev/null 2>&1 || true; rm -rf "$fixture"' EXIT
 python aura/modules/aura-integrity/tools/fixture.py "$fixture"
 python - "$fixture" <<'PY'
 import pathlib,sys,zipfile
@@ -12,11 +13,14 @@ with zipfile.ZipFile('out/AURA-Integrity-Candidate-1.0.zip') as z:
 PY
 adb root
 adb wait-for-device
+python aura/modules/aura-integrity/tools/trust-relay.py > "$fixture/relay.log" 2>&1 &
+relay_pid=$!
+adb reverse tcp:18743 tcp:18743
 adb shell mkdir -p "$remote"
 adb shell chmod 700 "$remote"
 adb push "$fixture/." "$remote/" >/dev/null
 run_validator() {
-    adb shell /system/bin/app_process -Djava.class.path="$remote/classes.dex" "$remote" org.matrix.TEESimulator.AuraKeyboxValidator "$1" "$2"
+    adb shell /system/bin/app_process -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18743 -Djava.class.path="$remote/classes.dex" "$remote" org.matrix.TEESimulator.AuraKeyboxValidator "$1" "$2"
 }
 # Exercise live public Google trust refresh; no private identities are fetched.
 if ! run_validator --refresh-roots "$remote/refreshed-roots.json" > "$fixture/refresh.log"; then

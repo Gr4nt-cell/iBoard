@@ -22,7 +22,7 @@ Google can reject a verdict for certification, root detection, hardware state, s
 
 ## Source and privacy
 
-The build pins TEESimulator and its LSPlt submodule, publishes a corresponding-source archive, and records hashes and changes. Backend source: https://github.com/JingMatrix/TEESimulator (GPLv3). Runtime configuration was moved to `/data/adb/aura_integrity`; no existing `/data/adb/tricky_store` credentials are accessed. Debug/verbose backend logs are disabled in the release configuration. Only Google's public revocation JSON is fetched at activation; no private-key bytes or certificate serials are sent to that endpoint.
+The build pins TEESimulator and its LSPlt submodule, publishes a corresponding-source archive, and records hashes and changes. Backend source: https://github.com/JingMatrix/TEESimulator (GPLv3). Runtime configuration was moved to `/data/adb/aura_integrity`; no existing `/data/adb/tricky_store` credentials are accessed. Debug/verbose backend logs are disabled in the release configuration. Only Google's public roots and revocation JSON are fetched at activation; no private-key bytes or certificate serials are sent to those endpoints.
 
 Google roots: https://android.googleapis.com/attestation/root
 Revocation data: https://android.googleapis.com/attestation/status
@@ -33,3 +33,5 @@ Official verification guidance: https://developer.android.com/privacy-and-securi
 Before each activation, the module refreshes Google's public attestation trust roots over HTTPS from `https://android.googleapis.com/attestation/root`. It also fetches the public revocation list from `https://android.googleapis.com/attestation/status` during credential validation. An unavailable endpoint or invalid response prevents activation. Refreshed public roots are stored privately at `/data/adb/aura_integrity/roots.json`. The bundled root snapshot remains available for inspection but is not used as a silent fallback for a failed refresh.
 
 These public endpoints do not distribute private keyboxes. Google's Remote Key Provisioning issues certificates for keys generated inside supported secure hardware; it is not a downloadable Magisk keybox service. No keybox search, harvesting, extraction, or third-party key source is included. Your authorized private credential remains local.
+
+CI uses a loopback CONNECT relay to work around emulator DNS. Google TLS remains end-to-end and uses normal certificate verification; no custom CA, plaintext fixture response, or private credential is sent through it. This relay is a build-test tool and is not installed on the phone.
