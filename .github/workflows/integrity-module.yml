@@ -43,7 +43,7 @@ jobs:
         working-directory: engine
         run: |
           chmod +x gradlew
-          ./gradlew --stacktrace :app:testReleaseUnitTest zipRelease -Dorg.gradle.jvmargs=-Xmx4g --max-workers=2
+          ./gradlew --stacktrace :app:testReleaseUnitTest zipRelease -Pandroid.onlyEnableUnitTestForTheTestedBuildType=false -Dorg.gradle.jvmargs=-Xmx4g --max-workers=2
       - name: Validate native package and corresponding source
         run: python aura/modules/aura-integrity/tools/package.py engine out
       - name: Upload reports

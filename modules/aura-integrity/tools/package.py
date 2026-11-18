@@ -7,6 +7,21 @@ def package(root,out):
     out.mkdir(parents=True,exist_ok=True)
     candidates=list((root/'out').glob('*Release*.zip'));assert len(candidates)==1,candidates
     target=out/'AURA-Integrity-Candidate-1.0.zip';shutil.copy(candidates[0],target)
+    # Redistribute runtime dependency notices alongside the binary, not only in source.
+    notices={}
+    external=root/'app/src/main/cpp/external'
+    for path in external.rglob('*'):
+        if path.is_file() and path.name.upper().startswith(('LICENSE','COPYING','NOTICE')) and path.stat().st_size<262144:
+            notices['THIRD-PARTY/'+str(path.relative_to(external))]=path.read_bytes()
+    cache=Path.home()/'.gradle/caches/modules-2/files-2.1/org.bouncycastle'
+    for jar in cache.rglob('*.jar'):
+        with zipfile.ZipFile(jar) as dependency:
+            if 'META-INF/LICENSE.md' in dependency.namelist():
+                notices['THIRD-PARTY/BouncyCastle-LICENSE.md']=dependency.read('META-INF/LICENSE.md')
+                break
+    assert 'THIRD-PARTY/BouncyCastle-LICENSE.md' in notices,'Missing BouncyCastle runtime notice'
+    with zipfile.ZipFile(target,'a',zipfile.ZIP_DEFLATED) as z:
+        for name,data in sorted(notices.items()):z.writestr(name,data)
     with zipfile.ZipFile(target) as z:
         assert z.testzip() is None
         members=z.namelist()
