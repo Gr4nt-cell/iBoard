@@ -1,0 +1,67 @@
+name: AURA Integrity candidate
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/aura-integrity/**'
+      - '.github/workflows/integrity-module.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: aura-integrity-candidate
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: modules/aura-integrity
+          path: aura
+          persist-credentials: false
+      - name: Checkout pinned native engine and submodules
+        uses: actions/checkout@v4
+        with:
+          repository: JingMatrix/TEESimulator
+          ref: 622eb9c50f637a6f56597cb4ce0312e165106c9c
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+          path: engine
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check packaging scripts
+        run: python aura/modules/aura-integrity/tools/test_scripts.py
+      - name: Prepare auditable source integration
+        run: python aura/modules/aura-integrity/tools/prepare.py engine
+      - name: Compile native module and test credential validation
+        working-directory: engine
+        run: |
+          chmod +x gradlew
+          ./gradlew --stacktrace :app:testReleaseUnitTest zipRelease -Dorg.gradle.jvmargs=-Xmx4g --max-workers=2
+      - name: Validate native package and corresponding source
+        run: python aura/modules/aura-integrity/tools/package.py engine out
+      - name: Upload reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: AURA-Integrity-build-reports
+          path: |
+            engine/app/build/reports/tests/
+            engine/app/build/test-results/
+            out/*
+          retention-days: 7
+      - name: Publish candidate (not a verified Strong verdict)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: aura
+        run: |
+          TAG=aura-integrity-v1.0.0-candidate
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "${{ github.sha }}" --prerelease --title "AURA Integrity 1.0 candidate" --notes-file modules/aura-integrity/module/README.md
+          gh release upload "$TAG" ../out/* --clobber

@@ -1,0 +1,3 @@
+#!/system/bin/sh
+MODDIR=$1
+exec /system/bin/app_process -Djava.class.path="$MODDIR/classes.dex" "$MODDIR" --nice-name=AuraIntegrity org.matrix.TEESimulator.App

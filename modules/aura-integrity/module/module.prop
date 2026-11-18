@@ -1,0 +1,6 @@
+id=aura_integrity
+name=AURA Integrity Candidate
+version=1.0.0-candidate
+versionCode=10000
+author=gr4nt; TEESimulator contributors
+description=Self-contained attestation compatibility candidate. Requires your authorized keybox. Strong verdict is not guaranteed.

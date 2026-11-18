@@ -4,8 +4,8 @@ on:
   push:
     branches: [main, gpt]
     paths-ignore:
-      - 'modules/aura-emoji/**'
-      - '.github/workflows/emoji-module.yml'
+      - 'modules/**'
+      - '.github/workflows/*module.yml'
   workflow_dispatch:
 
 permissions:
