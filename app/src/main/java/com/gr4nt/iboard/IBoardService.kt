@@ -108,12 +108,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun toggleVoice() {
         finishComposer()
-        online?.let { it.stop(); voiceMessage("Finishingâ¦ Tap mic to cancel"); online = null; return }
+        online?.let { it.stop(); voiceMessage("Finishing… Tap mic to cancel"); online = null; return }
         if (voiceJob?.isActive == true) {
             if (recorder != null) {
                 recorder?.stop()
                 recorder = null
-                voiceMessage("Finishing offlineâ¦ Tap mic to cancel")
+                voiceMessage("Finishing offline… Tap mic to cancel")
             } else cancelVoice()
             return
         }
@@ -186,7 +186,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             })
         if (!speech.start()) { toast("Online dictation isn't available. Using offline dictation."); startOfflineVoice(); return }
         online = speech
-        voiceMessage("Listening Â· Tap mic to finish")
+        voiceMessage("Listening · Tap mic to finish")
     }
 
     private fun startOfflineVoice() {
@@ -195,7 +195,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val language = lang
         val queue = kotlinx.coroutines.channels.Channel<FloatArray>(3)
         voiceQueue = queue
-        voiceMessage("Preparing voice modelâ¦")
+        voiceMessage("Preparing voice model…")
         voiceJob = scope.launch {
             var model: com.gr4nt.iboard.voice.WhisperLib.Model? = null
             try {
@@ -203,7 +203,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                     val chosen = com.gr4nt.iboard.voice.SpeechModels.active(this@IBoardService, install = true)
                         ?: throw NoVoiceModel()
                     model = com.gr4nt.iboard.voice.WhisperLib.load(com.gr4nt.iboard.voice.SpeechModels.file(this@IBoardService, chosen).path)
-                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings âº Voice Model.")
+                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings › Voice Model.")
                 }
                 val loaded = model ?: error("Unable to load offline speech")
                 voiceModel = loaded
@@ -215,22 +215,22 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                         }
                     },
                     onLevel = {},
-                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offlineâ¦ Tap mic to cancel") } } },
+                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offline… Tap mic to cancel") } } },
                     onError = { scope.launch { if (session == voiceSession) { toast("Microphone unavailable. Check microphone access."); cancelVoice() } } },
                     onFinished = { queue.close() },
                 )
                 recorder = capture
                 if (!capture.start()) error("Cannot open microphone. Check microphone access.")
-                voiceMessage("Listening offline Â· Tap mic to finish")
+                voiceMessage("Listening offline · Tap mic to finish")
                 var committed = false
                 for (samples in queue) {
                     val started = SystemClock.elapsedRealtime()
                     val progress = launch {
                         while (session == voiceSession) {
                             val seconds = (SystemClock.elapsedRealtime() - started) / 1000
-                            val percent = loaded.progress().let { if (it in 1..99) " Â· $it%" else "" }
+                            val percent = loaded.progress().let { if (it in 1..99) " · $it%" else "" }
                             val action = if (recorder != null) "mic finishes" else "mic cancels"
-                            keyboard?.voiceStatus = "Transcribing$percent Â· ${seconds}s Â· $action"
+                            keyboard?.voiceStatus = "Transcribing$percent · ${seconds}s · $action"
                             delay(500)
                         }
                     }
@@ -250,14 +250,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                         committed = true
                         refresh()
                     }
-                    voiceMessage(if (recorder != null) "Listening offline Â· Tap mic to finish" else "Finishing offline Â· Tap mic to cancel")
+                    voiceMessage(if (recorder != null) "Listening offline · Tap mic to finish" else "Finishing offline · Tap mic to cancel")
                 }
                 if (!committed && session == voiceSession) toast("No speech recognized. Please try again closer to the microphone.")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: NoVoiceModel) {
                 if (session == voiceSession) {
-                    toast("Download a voice model first: Settings âº Voice Model")
+                    toast("Download a voice model first: Settings › Voice Model")
                     runCatching {
                         startActivity(Intent(this@IBoardService, com.gr4nt.iboard.settings.SettingsActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("open", "voice_model"))
@@ -830,7 +830,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun showTranslateBar() {
         val buf = translateBuf ?: run { keyboard?.translate = null; return }
         val from = if (tFrom == com.gr4nt.iboard.translate.TranslatorEngine.DETECT && detected != null)
-            "${com.gr4nt.iboard.translate.TranslatorEngine.short(detected!!)} â" else com.gr4nt.iboard.translate.TranslatorEngine.short(tFrom)
+            "${com.gr4nt.iboard.translate.TranslatorEngine.short(detected!!)} ✓" else com.gr4nt.iboard.translate.TranslatorEngine.short(tFrom)
         keyboard?.translate = KeyboardView.Translate(from, com.gr4nt.iboard.translate.TranslatorEngine.short(tTo), buf.toString(), translateStatus)
     }
 
@@ -855,7 +855,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         scope.launch {
             try {
                 if (!engine.isDownloaded(from, to)) {
-                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}â¦"
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
                     showTranslateBar()
                     engine.download(from, to)
                     translateStatus = null
@@ -888,7 +888,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 }
                 val to = tTo
                 if (!engine.isDownloaded(from, to)) {
-                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}â¦"
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
                     showTranslateBar()
                     engine.download(from, to)
                 }
@@ -1160,10 +1160,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             val c = before[i - 1]
             if (c.isLetter() || Character.getType(c) == Character.NON_SPACING_MARK.toInt() ||
                 Character.getType(c) == Character.COMBINING_SPACING_MARK.toInt() ||
-                (c in "'â" && i > 1 && before[i - 2].isLetter())
+                (c in "'’" && i > 1 && before[i - 2].isLetter())
             ) i-- else break
         }
-        return before.substring(i).trimStart('\'', 'â')
+        return before.substring(i).trimStart('\'', '’')
     }
 
     private fun refresh() {

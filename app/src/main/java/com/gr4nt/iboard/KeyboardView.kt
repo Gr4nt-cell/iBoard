@@ -572,7 +572,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             canvas.drawRect(end, cy - 10 * d, end + 1.5f * d, cy + 10 * d, fillPaint)
         }
         stripPaint.textAlign = Paint.Align.CENTER
-        // close (Ã)
+        // close (×)
         val cx = width - 26 * d
         fillPaint.color = if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
         canvas.drawCircle(cx, cy, 16 * d, fillPaint)
@@ -607,7 +607,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         val glass = if (theme.dark) 0x33FFFFFF else 0xE6FFFFFF.toInt()
         stripPaint.typeface = medium
         stripPaint.textAlign = Paint.Align.CENTER
-        // [ From â¾ ]  â  [ To â¾ ]                (Ã)
+        // [ From ▾ ]  ⇄  [ To ▾ ]                (×)
         val closeX = width - 26 * d
         val avail = closeX - 22 * d - 8 * d
         val swapW = 40 * d
@@ -778,7 +778,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 canvas.drawCircle(cx, stripH / 2f, 16 * d, fillPaint)
             }
             stripPaint.color = theme.stripText.withAlpha(0.6f)
-            canvas.drawText(if (last < candidates.size - 1) "âº" else "â¹", cx, baseline(stripH / 2f, stripPaint), stripPaint)
+            canvas.drawText(if (last < candidates.size - 1) "›" else "‹", cx, baseline(stripH / 2f, stripPaint), stripPaint)
         }
     }
 
@@ -813,7 +813,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 canvas.drawRoundRect(tmpRect, 9 * d, 9 * d, fillPaint)
             }
             var label = when (s.kind) {
-                Suggestion.Kind.LITERAL -> if (suggestions.any { it.autoCorrect }) "â${s.text}â" else s.text
+                Suggestion.Kind.LITERAL -> if (suggestions.any { it.autoCorrect }) "“${s.text}”" else s.text
                 else -> s.text
             }
             val showClip = s.kind == Suggestion.Kind.CLIP

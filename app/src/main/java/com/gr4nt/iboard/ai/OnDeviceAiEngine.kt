@@ -89,7 +89,7 @@ class OnDeviceAiEngine {
     companion object {
         /** Defensive parser for model output; suggestions are plain insertable text only. */
         fun parsePredictions(raw: String): List<String> {
-            val seen = LinkedHashSet<String>()
+            val seen = LinkedHashMap<String, String>()
             raw.lineSequence().map { line ->
                 line.trim()
                     .replace(Regex("^(?:[-*•]|\\d+[.)])\\s*"), "")
@@ -98,8 +98,11 @@ class OnDeviceAiEngine {
                     .removeSurrounding("'")
                     .trim()
             }.filter { it.isNotEmpty() && it.length <= 48 && '\n' !in it && '\r' !in it }
-                .forEach { seen += it }
-            return seen.take(3)
+                .forEach { candidate ->
+                    val key = candidate.lowercase()
+                    if (key !in seen) seen[key] = candidate
+                }
+            return seen.values.take(3)
         }
     }
 }

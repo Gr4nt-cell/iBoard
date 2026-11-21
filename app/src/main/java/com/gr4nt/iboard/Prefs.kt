@@ -128,19 +128,19 @@ class Prefs(context: Context) {
 
         fun languageLabel(code: String): String = when (code) {
             "en" -> "English"
-            "es" -> "EspaÃ±ol"
-            "fr" -> "FranÃ§ais"
-            "pt" -> "PortuguÃªs"
+            "es" -> "Español"
+            "fr" -> "Français"
+            "pt" -> "Português"
             "de" -> "Deutsch"
-            "ar" -> "Ø§ÙØ¹Ø±Ø¨ÙØ©"
-            "tr" -> "TÃ¼rkÃ§e"
+            "ar" -> "العربية"
+            "tr" -> "Türkçe"
             "it" -> "Italiano"
             "pl" -> "Polski"
             "da" -> "Dansk"
-            "cs" -> "ÄeÅ¡tina"
-            "hi" -> "à¤¹à¤¿à¤¨à¥à¤¦à¥"
-            "ko" -> "íêµ­ì´"
-            "zh" -> "ç®ä½ä¸­æ"
+            "cs" -> "Čeština"
+            "hi" -> "हिन्दी"
+            "ko" -> "한국어"
+            "zh" -> "简体中文"
             else -> code
         }
 
