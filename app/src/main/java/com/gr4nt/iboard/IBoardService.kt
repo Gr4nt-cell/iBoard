@@ -1192,8 +1192,18 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val kv = keyboard ?: return
         val ic = currentInputConnection ?: return
         cancelAiPrediction()
-        if (password || lang == "zh") {
+        if (password) {
             show(emptyList()); return
+        }
+        if (lang == "zh") {
+            show(emptyList())
+            if (pinyin.isEmpty() && prefs.aiPredictions && !incognito &&
+                fieldKind == FieldKind.TEXT && !noAutoCorrect
+            ) {
+                val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
+                requestAiPredictions(before, emptyList())
+            }
+            return
         }
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
         val word = currentWord(before)
@@ -1323,7 +1333,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val frame = root ?: return
         val theme = kbTheme ?: return
         val ic = currentInputConnection ?: return
-        val selected = ic.getSelectedText(0)?.toString().orEmpty().trim()
+        val selected = ic.getSelectedText(0)?.toString().orEmpty()
+        if (selected.length > OnDeviceAiEngine.MAX_INPUT_CHARACTERS) {
+            toast("Select a shorter passage (up to ${OnDeviceAiEngine.MAX_INPUT_CHARACTERS} characters) to edit with iBoard AI")
+            return
+        }
         val source = selected.ifBlank {
             ic.getTextBeforeCursor(500, 0)?.toString().orEmpty().trim().takeLast(420)
         }
@@ -1332,7 +1346,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         endEmojiSearch()
         closePanels()
         lateinit var panel: AiAssistantPanel
-        panel = AiAssistantPanel(this, theme, panelHeight(), source, selected.isNotEmpty(), object : AiAssistantPanel.Listener {
+        panel = AiAssistantPanel(this, theme, panelHeight(), source, selected.isNotBlank(), object : AiAssistantPanel.Listener {
             override fun onGenerate(action: OnDeviceAiEngine.Action, source: String) {
                 aiPanelJob?.cancel()
                 aiPanelJob = scope.launch {
