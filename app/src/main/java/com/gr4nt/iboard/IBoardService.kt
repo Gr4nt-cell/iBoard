@@ -1312,6 +1312,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     private fun showAiAssistant() {
+        if (translateBuf != null || emojiQuery != null) {
+            toast("Close Translator or emoji search before using iBoard AI")
+            return
+        }
         if (password || incognito || fieldKind != FieldKind.TEXT) {
             toast("iBoard AI is unavailable in this private or non-text field")
             return
@@ -1328,7 +1332,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         endEmojiSearch()
         closePanels()
         lateinit var panel: AiAssistantPanel
-        panel = AiAssistantPanel(this, theme, panelHeight(), source, object : AiAssistantPanel.Listener {
+        panel = AiAssistantPanel(this, theme, panelHeight(), source, selected.isNotEmpty(), object : AiAssistantPanel.Listener {
             override fun onGenerate(action: OnDeviceAiEngine.Action, source: String) {
                 aiPanelJob?.cancel()
                 aiPanelJob = scope.launch {
@@ -1361,7 +1365,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             override fun onApply(text: String) {
                 if (text.isNotBlank()) {
                     currentInputConnection?.commitText(text, 1)
+                    lastAutoCorrect = null
+                    spaceAutoInserted = false
                     closePanels()
+                    refresh()
                 }
             }
 

@@ -22,6 +22,7 @@ class AiAssistantPanel(
     private val theme: KeyboardTheme,
     panelHeight: Int,
     private val source: String,
+    private val hasSelection: Boolean,
     private val listener: Listener,
 ) : FrameLayout(context) {
     interface Listener {
@@ -63,7 +64,7 @@ class AiAssistantPanel(
         body.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (46 * d).toInt()))
 
         body.addView(TextView(context).apply {
-            text = "Select text first to replace it; otherwise Apply inserts at the cursor. Gemini Nano runs on this phone."
+            text = "Select text for edits; Continue and Write Greeting use recent context. Apply replaces selected text or inserts at the cursor."
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(theme.keySubText)
             setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (8 * d).toInt())
@@ -131,6 +132,13 @@ class AiAssistantPanel(
         button.setOnClickListener {
             if (source.isBlank()) {
                 setStatus("Select text first, or type a sentence before opening iBoard AI.")
+            } else if (!hasSelection && action in setOf(
+                    OnDeviceAiEngine.Action.PROOFREAD,
+                    OnDeviceAiEngine.Action.IMPROVE,
+                    OnDeviceAiEngine.Action.EMOJIFY,
+                )
+            ) {
+                setStatus("Select the text you want to edit, then try again.")
             } else {
                 setBusy(true)
                 setResult("")
