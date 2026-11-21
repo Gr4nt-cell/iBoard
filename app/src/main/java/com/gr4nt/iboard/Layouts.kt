@@ -1,6 +1,6 @@
 package com.gr4nt.iboard
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_NUMBER_PAD, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, MIC, SPACE, RETURN, CLIPBOARD, SPACER, SETTINGS, TRANSLATE }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, TO_NUMBER_PAD, TO_SYMBOLS, TO_LETTERS, TO_MORE_SYMBOLS, EMOJI, GLOBE, MIC, SPACE, RETURN, CLIPBOARD, SPACER, SETTINGS, TRANSLATE, AI_ASSIST }
 
 enum class Page { LETTERS, NUMBER_PAD, SYMBOLS, MORE_SYMBOLS }
 
@@ -155,7 +155,7 @@ object Layouts {
         bottom += Key(KeyType.RETURN, width = 2f)
         rows += KeyRow(bottom)
 
-        // Settings, emoji, globe, mic, clipboard and translator share one Liquid Glass capsule under the keys.
+        // Settings, emoji, globe, mic, clipboard, translator and iBoard AI share the capsule under the keys.
         if (utilityRow && dock.isNotEmpty()) rows += KeyRow(dock, isUtility = true)
 
         return KeyboardLayout(rows, units, rtl = lang == "ar", lang = lang)

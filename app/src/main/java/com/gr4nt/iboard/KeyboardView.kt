@@ -305,6 +305,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 KeyType.EMOJI -> Icons.Kind.EMOJI
                 KeyType.SETTINGS -> Icons.Kind.GEAR
                 KeyType.TRANSLATE -> Icons.Kind.TRANSLATE
+                KeyType.AI_ASSIST -> Icons.Kind.SPARKLE
                 else -> Icons.Kind.GEAR
             }
             val color = (if (on) theme.accent else theme.keyText).withAlpha(0.9f * alpha)
@@ -387,6 +388,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.EMOJI -> Icons.draw(canvas, Icons.Kind.EMOJI, cx, cy, iconSize, fgA)
             KeyType.MIC -> Icons.draw(canvas, Icons.Kind.MIC, cx, cy, iconSize, if (voiceActive) theme.accent else fgA)
             KeyType.GLOBE -> Icons.draw(canvas, Icons.Kind.GLOBE, cx, cy, iconSize, fgA)
+            KeyType.AI_ASSIST -> Icons.draw(canvas, Icons.Kind.SPARKLE, cx, cy, iconSize, fgA)
             KeyType.RETURN -> {
                 val label = returnLabel
                 val icon = returnIcon
@@ -722,6 +724,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
                 KeyType.EMOJI -> Icons.Kind.EMOJI
                 KeyType.TRANSLATE -> Icons.Kind.TRANSLATE
+                KeyType.AI_ASSIST -> Icons.Kind.SPARKLE
                 else -> Icons.Kind.GEAR
             }
             val color = if (type == KeyType.MIC && voiceActive) theme.accent else iconColor

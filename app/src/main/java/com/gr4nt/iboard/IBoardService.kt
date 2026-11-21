@@ -17,6 +17,8 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.gr4nt.iboard.ai.AiAssistantPanel
+import com.gr4nt.iboard.ai.OnDeviceAiEngine
 import com.gr4nt.iboard.clipboard.ClipboardPanel
 import com.gr4nt.iboard.clipboard.ClipboardStore
 import com.gr4nt.iboard.emoji.EmojiPanel
@@ -46,6 +48,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var keyboard: KeyboardView? = null
     private var emojiPanel: EmojiPanel? = null
     private var clipPanel: ClipboardPanel? = null
+    private var aiPanel: AiAssistantPanel? = null
     private var kbTheme: KeyboardTheme? = null
     private var builtSignature = ""
 
@@ -61,6 +64,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var ownCaps = true
 
     private var suggester: Suggester? = null
+    private val aiEngine by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { OnDeviceAiEngine() }
+    private var aiPredictionJob: Job? = null
+    private var aiPredictionSequence = 0L
+    private var aiPanelJob: Job? = null
     private var shown: List<Suggestion> = emptyList()
     private var pendingAutoCorrect: String? = null
     private var lastAutoCorrect: Triple<String, String, String>? = null // original, replacement, separator
@@ -440,6 +447,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInput() {
         cancelVoice()
+        cancelAiPrediction()
+        closePanels()
         clearComposer()
         editorSession = null
         keyboard?.removeCallbacks(refreshRunnable)
@@ -602,6 +611,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onKey(key: Key) {
         if (key.type == KeyType.MIC) { toggleVoice(); return }
         if (voiceJob?.isActive == true || online != null) cancelVoice()
+        if (key.type == KeyType.AI_ASSIST) { showAiAssistant(); return }
         if (key.type == KeyType.TRANSLATE) { if (translateBuf != null) endTranslate() else startTranslate(); return }
         translateBuf?.let { buf ->
             when (key.type) {
@@ -1181,8 +1191,19 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun refreshSuggestions() {
         val kv = keyboard ?: return
         val ic = currentInputConnection ?: return
-        if (password || lang == "zh") {
+        cancelAiPrediction()
+        if (password) {
             show(emptyList()); return
+        }
+        if (lang == "zh") {
+            show(emptyList())
+            if (pinyin.isEmpty() && prefs.aiPredictions && !incognito &&
+                fieldKind == FieldKind.TEXT && !noAutoCorrect
+            ) {
+                val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
+                requestAiPredictions(before, emptyList())
+            }
+            return
         }
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
         val word = currentWord(before)
@@ -1207,7 +1228,43 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val clip = if (word.isEmpty() && prefs.clipboardHistory) clipStore.recent(90_000)
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
 
-        show(if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3))
+        val visible = if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3)
+        show(visible)
+        if (word.isEmpty() && prefs.aiPredictions && !password && !incognito &&
+            fieldKind == FieldKind.TEXT && !noAutoCorrect
+        ) {
+            requestAiPredictions(before, visible)
+        }
+    }
+
+    private fun cancelAiPrediction() {
+        aiPredictionSequence++
+        aiPredictionJob?.cancel()
+        aiPredictionJob = null
+    }
+
+    private fun requestAiPredictions(before: String, fallback: List<Suggestion>) {
+        val session = editorSession
+        val sequence = ++aiPredictionSequence
+        aiPredictionJob = scope.launch {
+            delay(350)
+            try {
+                if (aiEngine.state() != OnDeviceAiEngine.State.AVAILABLE) return@launch
+                val words = aiEngine.predictNextWords(before)
+                if (sequence != aiPredictionSequence || editorSession != session ||
+                    password || incognito || fieldKind != FieldKind.TEXT
+                ) return@launch
+                val latest = currentInputConnection?.getTextBeforeCursor(320, 0)?.toString() ?: return@launch
+                if (latest != before || words.isEmpty()) return@launch
+                val clip = fallback.firstOrNull { it.kind == Suggestion.Kind.CLIP }
+                val ai = words.map { Suggestion(it, Suggestion.Kind.WORD) }
+                show((listOfNotNull(clip) + ai).take(3))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Keep the existing local suggestions if Gemini Nano is unavailable or fails.
+            }
+        }
     }
 
     private fun show(list: List<Suggestion>) {
@@ -1264,11 +1321,115 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         frame.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
     }
 
+    private fun showAiAssistant() {
+        if (translateBuf != null || emojiQuery != null) {
+            toast("Close Translator or emoji search before using iBoard AI")
+            return
+        }
+        if (password || incognito || fieldKind != FieldKind.TEXT) {
+            toast("iBoard AI is unavailable in this private or non-text field")
+            return
+        }
+        val frame = root ?: return
+        val theme = kbTheme ?: return
+        val ic = currentInputConnection ?: return
+        val selected = ic.getSelectedText(0)?.toString().orEmpty()
+        if (selected.length > OnDeviceAiEngine.MAX_INPUT_CHARACTERS) {
+            toast("Select a shorter passage (up to ${OnDeviceAiEngine.MAX_INPUT_CHARACTERS} characters) to edit with iBoard AI")
+            return
+        }
+        val source = selected.ifBlank {
+            ic.getTextBeforeCursor(500, 0)?.toString().orEmpty().trim().takeLast(420)
+        }
+        cancelAiPrediction()
+        finishComposer()
+        endEmojiSearch()
+        closePanels()
+        lateinit var panel: AiAssistantPanel
+        panel = AiAssistantPanel(this, theme, panelHeight(), source, selected.isNotBlank(), object : AiAssistantPanel.Listener {
+            override fun onGenerate(action: OnDeviceAiEngine.Action, source: String) {
+                aiPanelJob?.cancel()
+                aiPanelJob = scope.launch {
+                    try {
+                        when (aiEngine.state()) {
+                            OnDeviceAiEngine.State.AVAILABLE -> {
+                                val result = aiEngine.write(action, source)
+                                if (aiPanel === panel) {
+                                    panel.setResult(result)
+                                    panel.setStatus("Ready · generated on this phone")
+                                }
+                            }
+                            OnDeviceAiEngine.State.DOWNLOADABLE ->
+                                panel.setStatus("Tap Prepare Model above, or download it in Settings.")
+                            OnDeviceAiEngine.State.DOWNLOADING ->
+                                panel.setStatus("Android AI Core is downloading the model.")
+                            OnDeviceAiEngine.State.UNAVAILABLE ->
+                                panel.setStatus("Gemini Nano is not supported on this phone.")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        panel.setStatus("Couldn't generate text. Check model readiness in Settings.")
+                    } finally {
+                        if (aiPanel === panel) panel.setBusy(false)
+                    }
+                }
+            }
+
+            override fun onApply(text: String) {
+                if (text.isNotBlank()) {
+                    currentInputConnection?.commitText(text, 1)
+                    lastAutoCorrect = null
+                    spaceAutoInserted = false
+                    closePanels()
+                    refresh()
+                }
+            }
+
+            override fun onPrepareModel() {
+                aiPanelJob?.cancel()
+                aiPanelJob = scope.launch {
+                    panel.setStatus("Preparing on-device model…")
+                    try {
+                        aiEngine.download { progress ->
+                            if (aiPanel === panel) panel.setStatus(progress)
+                        }
+                        if (aiPanel === panel) panel.setStatus("Ready · generated on this phone")
+                    } catch (_: Exception) {
+                        val state = aiEngine.state()
+                        if (aiPanel === panel) panel.setStatus(
+                            if (state == OnDeviceAiEngine.State.UNAVAILABLE)
+                                "Gemini Nano is not supported on this phone."
+                            else "Download failed. Check internet and Android AI Core."
+                        )
+                    }
+                }
+            }
+
+            override fun onClose() = closePanels()
+        })
+        aiPanel = panel
+        keyboard?.visibility = View.GONE
+        frame.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight()))
+        scope.launch {
+            panel.setStatus(when (aiEngine.state()) {
+                OnDeviceAiEngine.State.AVAILABLE -> "Ready · generated on this phone"
+                OnDeviceAiEngine.State.DOWNLOADABLE -> "Model available to download in Settings."
+                OnDeviceAiEngine.State.DOWNLOADING -> "Android AI Core is downloading the model."
+                OnDeviceAiEngine.State.UNAVAILABLE -> "Gemini Nano is not supported on this phone."
+            })
+        }
+    }
+
     private fun closePanels() {
+        aiPanelJob?.cancel()
+        aiPanelJob = null
         emojiPanel?.let { root?.removeView(it) }
         clipPanel?.let { root?.removeView(it) }
+        aiPanel?.let { root?.removeView(it) }
         emojiPanel = null
         clipPanel = null
+        aiPanel = null
         keyboard?.visibility = View.VISIBLE
     }
 

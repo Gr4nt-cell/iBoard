@@ -247,6 +247,7 @@ class SettingsActivity : AppCompatActivity() {
         com.gr4nt.iboard.KeyType.GLOBE -> "Languages"
         com.gr4nt.iboard.KeyType.MIC -> "Dictation"
         com.gr4nt.iboard.KeyType.CLIPBOARD -> "Clipboard"
+        com.gr4nt.iboard.KeyType.AI_ASSIST -> "AI Assistant"
         else -> "Translator"
     }
 
@@ -256,14 +257,15 @@ class SettingsActivity : AppCompatActivity() {
         com.gr4nt.iboard.KeyType.GLOBE -> Icons.Kind.GLOBE
         com.gr4nt.iboard.KeyType.MIC -> Icons.Kind.MIC
         com.gr4nt.iboard.KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+        com.gr4nt.iboard.KeyType.AI_ASSIST -> Icons.Kind.SPARKLE
         else -> Icons.Kind.TRANSLATE
     }
 
-    /** Choose which of the six capsule buttons sit on the suggestion bar instead. */
+    /** Choose which capsule buttons sit on the suggestion bar instead. */
     private fun stripButtonsPage() {
         push(subPage("Suggestion Bar") {
             section(footer = "Turn a button on to move it from the icon capsule to the suggestion bar; turn it off to put it back in the capsule. Two fit on the suggestion bar: the first sits on the left, the second on the right.") {
-                val tints = listOf(gray, orange, blue, red, yellow, indigo)
+                val tints = listOf(gray, orange, blue, red, yellow, indigo, purple)
                 Prefs.DOCK_BUTTONS.forEachIndexed { i, t ->
                     lateinit var sw: IosSwitch
                     sw = switchRow(buttonIcon(t), tints[i], buttonName(t), t in prefs.stripButtons,
@@ -302,6 +304,59 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun label(entries: List<String>, values: List<String>, value: String?): String =
         entries.getOrNull(values.indexOf(value)) ?: entries.first()
+
+    private fun onDeviceAiPage() {
+        val engine = com.gr4nt.iboard.ai.OnDeviceAiEngine()
+        lateinit var stateValue: TextView
+        fun label(state: com.gr4nt.iboard.ai.OnDeviceAiEngine.State) = when (state) {
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.AVAILABLE -> "Ready on phone"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.DOWNLOADABLE -> "Ready to download"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.DOWNLOADING -> "Downloading"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE -> "Not supported"
+        }
+        val page = subPage("On-Device AI") {
+            section(footer = "Gemini Nano runs through Android AI Core on supported phones. Prepare the model here; writing assistance and AI predictions then work on-device, with no cloud fallback. Android may need internet to download the model.") {
+                stateValue = navRow(Icons.Kind.SPARKLE, purple, "Gemini Nano", "Checking…",
+                    subtitle = "On-device text generation") {
+                    lifecycleScope.launch {
+                        stateValue.text = "Checking…"
+                        stateValue.text = label(engine.state())
+                    }
+                }
+                actionRow("Prepare or download model", purple, Icons.Kind.SPARKLE, purple) {
+                    lifecycleScope.launch {
+                        when (engine.state()) {
+                            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.AVAILABLE -> {
+                                stateValue.text = "Ready on phone"
+                                toast("Gemini Nano is already ready")
+                            }
+                            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE -> {
+                                stateValue.text = "Not supported"
+                                toast("Gemini Nano is not available on this phone")
+                            }
+                            else -> {
+                                stateValue.text = "Preparing…"
+                                try {
+                                    engine.download { progress ->
+                                        runOnUiThread { stateValue.text = progress }
+                                    }
+                                    stateValue.text = "Ready on phone"
+                                } catch (_: Exception) {
+                                    val state = engine.state()
+                                    stateValue.text = label(state)
+                                    toast(if (state == com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE)
+                                        "Gemini Nano is not supported on this phone"
+                                    else "Couldn't prepare the model. Check internet and Android AI Core.")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        push(page)
+        lifecycleScope.launch { stateValue.text = label(engine.state()) }
+    }
 
     // ------------------------------------------------------------ main page
 
@@ -381,11 +436,17 @@ class SettingsActivity : AppCompatActivity() {
                 else startActivity(Intent(this@SettingsActivity, com.gr4nt.iboard.voice.MicrophonePermissionActivity::class.java))
             }
             navRow(Icons.Kind.BOOK, indigo, "Word Prediction", "On-device",
-                subtitle = "Trained context model + personal vocabulary") {
+                subtitle = "Gemini Nano when enabled; local fallback") {
                 AlertDialog.Builder(this@SettingsActivity).setTitle("On-device word prediction")
-                    .setMessage("Built-in models use the last two words to rank completions and predict the next word. Keyboard-aware corrections and your optional learned vocabulary work together in all six languages. Personal learning stays on this phone; reset it below.\n\nContext models trained on Tatoeba contributor sentences (CC BY 2.0 FR). https://tatoeba.org/en/downloads")
+                    .setMessage("When enabled and Gemini Nano is ready, the on-device model generates next-word suggestions. If the model is unavailable, iBoard falls back to its built-in context model. Prefix completion, keyboard-aware corrections, and optional learned vocabulary remain on this phone.\n\nThe bundled context model uses Tatoeba contributor sentences (CC BY 2.0 FR): https://tatoeba.org/en/downloads")
                     .setPositiveButton("Done", null).show()
             }
+            switchRow(Icons.Kind.SPARKLE, purple, "AI Next-Word Suggestions", prefs.aiPredictions,
+                subtitle = "Gemini Nano on this phone; local fallback") {
+                putBool(Prefs.AI_PREDICTIONS, it)
+            }
+            navRow(Icons.Kind.SPARKLE, purple, "On-Device AI Model", "Manage",
+                subtitle = "Check or download Gemini Nano") { onDeviceAiPage() }
         }
 
         l.section("Emoji", "Apps show typed emoji with your phone's own emoji font.") {
@@ -441,7 +502,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard and translator. Each button sits either in the capsule under the keys or on the suggestion bar.") {
+        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard, translator and iBoard AI. Each button sits either in the capsule under the keys or on the suggestion bar.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
             stripRow = navRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", stripValue()) { stripButtonsPage() }
         }
@@ -473,8 +534,8 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used to download voice and translation models and the optional stickers and GIFs, and for online dictation when it is on. The microphone is used only when you start dictation.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet to download voice models (from Hugging Face) and translation language packs (Google ML Kit), and for online dictation. Online dictation sends your voice to your phone's speech service (usually Google) to be transcribed; choose Offline in Dictation Engine to keep it on the phone. Translation runs on this phone and your text is not uploaded. Nothing you type is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
+        l.section("Privacy", "Typing, prediction and iBoard AI run on this phone. Model downloads and optional online dictation require internet. The microphone is used only when you start dictation.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to download voice and translation models, the optional on-device Gemini Nano model through Android AI Core, and optional stickers and GIFs. When available, Gemini Nano processes writing and prediction text on this phone; iBoard does not send that text to a cloud generation service. Model downloads may require internet. Online dictation sends your voice to your phone's speech service (usually Google); choose Offline to keep dictation on the phone. Translation runs on this phone. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields block iBoard AI and suggestions; incognito fields block iBoard AI and dictionary learning. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
