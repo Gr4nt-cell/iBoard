@@ -12,17 +12,21 @@ An offline Android keyboard with Liquid Glass keys, local word prediction and th
 - Number row, accents, cursor movement while holding space, long-press backspace, clipboard history and language switching remain available.
 - Emoji and clipboard panels resize with the device; the emoji grid adapts from 6 to 20 columns.
 
-## AI: Gemini Nano only
+## Prediction and AI
 
-Every AI feature in iBoard runs on **Gemini Nano**, Google's on-device model, through the ML Kit GenAI APIs (`genai-prompt`, `genai-speech-recognition`):
+**On every phone (offline, built in):**
 
-- **Word prediction:** completions, spelling corrections and next words in the suggestion bar.
-- **Dictation:** on-device speech recognition; words stream in while you speak.
-- **✨ AI tools** (the sparkle key): Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. A tool works on the selected text, or on the whole field when nothing is selected.
+- **Word prediction** for 6 languages: prefix completions, typo correction, contractions and accents, word-pair and three-word context models trained on Tatoeba, and personal learning of your own words and phrases.
+- **Touch-aware correction:** each letter is scored by how far the finger landed from every key, not just "neighbouring key or not". It also handles fuzzy completion of long words. In a simulated sloppy-typing test on the English dictionary (`SpatialCorrectionTest`), the first suggestion was right for 85.9% of mistyped words, against 64.4% with neighbour keys only.
+- **Dictation** with OpenAI Whisper via whisper.cpp. The model is downloaded once from Hugging Face (Fast / Balanced / Accurate) in Settings › Offline Voice Model, then works offline.
 
-Gemini Nano is **not bundled in the APK**, and it cannot be: Android's **AICore** system service installs it, updates it and runs it. iBoard asks AICore for it in Settings › Gemini Nano. It works only on phones that support Gemini Nano (for example Pixel 9 and later, Galaxy S25 and later, and recent Xiaomi, OPPO, vivo and Honor flagships) with a **locked bootloader**. On other phones iBoard types normally without prediction, dictation or AI tools.
+**Where the phone has Gemini Nano** (Android AICore, a supported phone with a locked bootloader):
 
-The earlier dictionary prediction, Whisper dictation, online dictation and ML Kit Translate have been removed.
+- Gemini Nano predictions are merged into the suggestion bar.
+- Dictation uses Gemini Nano speech recognition.
+- The ✨ key offers Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize.
+
+Gemini Nano is never bundled: AICore installs and runs it.
 
 ## Settings
 
@@ -36,14 +40,15 @@ The bundled font controls emoji rendering inside iBoard. The keyboard commits or
 
 ## Privacy
 
-Text and voice are processed by Gemini Nano on the phone; iBoard sends nothing you type or say to any server. The internet permission is used only for the optional sticker and GIF packs. Microphone access is optional and used only for dictation you start. Password fields turn suggestions and AI tools off. Clipboard history and settings stay on the phone, and Android app backup is disabled.
+Text and voice are processed on the phone (built-in engine, Whisper, or Gemini Nano); iBoard sends nothing you type or say to any server. The internet permission is used only to download the Whisper voice model and the optional sticker and GIF packs. Microphone access is optional and used only for dictation you start. Password fields turn suggestions and AI tools off. Learned words, clipboard history and settings stay on the phone, and Android app backup is disabled.
 
 ## Build and checks
 
-Use JDK 17+, Gradle 8.13 and the Android SDK (compileSdk 36). No NDK is needed any more:
+Use JDK 17+, Gradle 8.13 and the Android SDK (compileSdk 36, NDK 28.2.13676358, CMake 3.22.1):
 
 ```
-gradle :app:assembleDebug
+python3 tools/prepare_speech.py
+gradle :app:testReleaseUnitTest :app:assembleDebug
 ```
 
 The existing GitHub release signing configuration is preserved. `GITHUB_RUN_NUMBER` controls the version code, as before.

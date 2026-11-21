@@ -1,0 +1,13 @@
+{
+  "lang": "tr",
+  "url": "https://downloads.tatoeba.org/exports/per_language/tur/tur_sentences.tsv.bz2",
+  "sentences": 150000,
+  "heldout_sentences": 2000,
+  "heldout_words": 7307,
+  "top3_accuracy": 0.20870398248255098,
+  "context_coverage": 0.8261940604899412,
+  "bigrams": 32615,
+  "trigrams": 30196,
+  "corpus_prefix_sha256": "a63436e318617f90fa536de3e558aeda223ae190b1758b9011a9012f9e63e1b4",
+  "sha256": "32b5cd47f55c8c9c4c3b3ea969f2bed18545e0c1ef3be513043b80697053600b"
+}

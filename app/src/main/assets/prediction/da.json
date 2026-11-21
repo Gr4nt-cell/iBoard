@@ -1,0 +1,13 @@
+{
+  "lang": "da",
+  "url": "https://downloads.tatoeba.org/exports/per_language/dan/dan_sentences.tsv.bz2",
+  "sentences": 65184,
+  "heldout_sentences": 2000,
+  "heldout_words": 9127,
+  "top3_accuracy": 0.2969212227456996,
+  "context_coverage": 0.9314122931960118,
+  "bigrams": 17284,
+  "trigrams": 30359,
+  "corpus_prefix_sha256": "3594170b86897dd928a32af5deb035539c31306e8673a0bbbba7c32b26271309",
+  "sha256": "e576045615e0a6a037dead583190e7151603774126f3e5dee1840110dd14e29a"
+}

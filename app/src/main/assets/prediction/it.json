@@ -1,0 +1,13 @@
+{
+  "lang": "it",
+  "url": "https://downloads.tatoeba.org/exports/per_language/ita/ita_sentences.tsv.bz2",
+  "sentences": 150000,
+  "heldout_sentences": 2000,
+  "heldout_words": 8982,
+  "top3_accuracy": 0.2982631930527722,
+  "context_coverage": 0.9456691160097974,
+  "bigrams": 35744,
+  "trigrams": 75318,
+  "corpus_prefix_sha256": "be3d578c1bbbb6784b4a8849908bf4ba668b7493faf6c6dcbaf2243dab9e1b3a",
+  "sha256": "06f1b37021605110e32041a1772b07a64435197b096bf7adc5020dbf14b67b1c"
+}

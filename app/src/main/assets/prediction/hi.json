@@ -1,0 +1,13 @@
+{
+  "lang": "hi",
+  "url": "https://downloads.tatoeba.org/exports/per_language/hin/hin_sentences.tsv.bz2",
+  "sentences": 15180,
+  "heldout_sentences": 1507,
+  "heldout_words": 6407,
+  "top3_accuracy": 0.31918214452942095,
+  "context_coverage": 0.874200093647573,
+  "bigrams": 6528,
+  "trigrams": 6636,
+  "corpus_prefix_sha256": "06aec2c63aafd86856716bf839d09c3985bb1b6d245d981c3995bf54b7a98bc1",
+  "sha256": "6264423627de4a339c51a2c691fe2f3e621fdf8b6cc75b6ac7d19a6c8b72e537"
+}

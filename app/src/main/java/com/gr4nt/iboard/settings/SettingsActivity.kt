@@ -93,6 +93,7 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
         push(mainPage(), animate = false)
+        if (intent?.getStringExtra("open") == "voice_model") voiceModelsPage()
         // Ask AICore once, then show the Gemini Nano status on the main page.
         if (com.gr4nt.iboard.ai.GeminiNano.state == com.gr4nt.iboard.ai.GeminiNano.State.UNKNOWN) lifecycleScope.launch {
             com.gr4nt.iboard.ai.GeminiNano.refresh()
@@ -181,6 +182,71 @@ class SettingsActivity : AppCompatActivity() {
         return col
     }
 
+    /** Lists the downloadable voice models with live download progress. */
+    private fun voiceModelsPage() {
+        val models = com.gr4nt.iboard.voice.SpeechModels
+        lateinit var page: View
+        var alive = true
+        fun build(): View = subPage("Voice Model") {
+            section(footer = "Models are downloaded from Hugging Face (whisper.cpp) using Android's download manager. After that, dictation needs no connection. Only the model is downloaded; nothing you say or type is uploaded.") {
+                val selected = models.selectedId(this@SettingsActivity)
+                models.all.forEach { m ->
+                    val state = models.state(this@SettingsActivity, m)
+                    val value = when (state) {
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> if (m.id == selected) "In use ✓" else "Use"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Downloading -> "${state.percent}%"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Verifying -> "Checking…"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Failed -> "Retry"
+                        else -> "Get · ${m.approxMb} MB"
+                    }
+                    navRow(Icons.Kind.MIC, if (state is com.gr4nt.iboard.voice.SpeechModels.State.Installed) green else gray,
+                        m.title, value, subtitle = (state as? com.gr4nt.iboard.voice.SpeechModels.State.Failed)?.reason ?: m.detail) {
+                        when (state) {
+                            is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> AlertDialog.Builder(this@SettingsActivity)
+                                .setTitle("${m.title} voice model").setMessage("${m.detail}\n\nUse it for dictation, or delete it to free about ${m.approxMb} MB.")
+                                .setPositiveButton("Use") { _, _ -> models.select(this@SettingsActivity, m); refreshVoice() }
+                                .setNeutralButton("Delete") { _, _ -> models.delete(this@SettingsActivity, m); refreshVoice() }
+                                .setNegativeButton("Cancel", null).show()
+                            is com.gr4nt.iboard.voice.SpeechModels.State.Downloading, is com.gr4nt.iboard.voice.SpeechModels.State.Verifying ->
+                                AlertDialog.Builder(this@SettingsActivity).setTitle("Downloading ${m.title}")
+                                    .setMessage("You can leave this screen; the download continues in the background.")
+                                    .setPositiveButton("OK", null)
+                                    .setNegativeButton("Stop Download") { _, _ -> models.cancel(this@SettingsActivity, m); refreshVoice() }.show()
+                            else -> AlertDialog.Builder(this@SettingsActivity).setTitle("Download ${m.title} model?")
+                                .setMessage("${m.detail}\n\nAbout ${m.approxMb} MB. Wi-Fi is recommended.")
+                                .setPositiveButton("Download") { _, _ ->
+                                    runCatching { models.start(this@SettingsActivity, m) }
+                                        .onFailure { toast("Couldn't start the download") }
+                                    refreshVoice()
+                                }
+                                .setNegativeButton("Cancel", null).show()
+                        }
+                    }
+                }
+            }
+        }
+        refreshVoice = {
+            if (alive && stack.lastOrNull() === page) {
+                val fresh = build()
+                container.removeView(page); container.addView(fresh); stack[stack.lastIndex] = fresh; page = fresh
+            }
+        }
+        page = build()
+        push(page)
+        lifecycleScope.launch {
+            while (alive) {
+                kotlinx.coroutines.delay(1000)
+                if (!stack.contains(page)) { alive = false; break }
+                val busy = models.all.any { models.state(this@SettingsActivity, it).let { s -> s is com.gr4nt.iboard.voice.SpeechModels.State.Downloading || s is com.gr4nt.iboard.voice.SpeechModels.State.Verifying } }
+                if (busy) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { models.all.forEach { models.finishIfDone(this@SettingsActivity, it) } }
+                    refreshVoice()
+                }
+            }
+        }
+    }
+    private var refreshVoice: () -> Unit = {}
+
     /** Gemini Nano status, download and the switches for what it does. */
     private fun nanoPage() {
         lateinit var page: View
@@ -196,7 +262,7 @@ class SettingsActivity : AppCompatActivity() {
         fun build(): View = subPage("Gemini Nano") {
             val st = com.gr4nt.iboard.ai.GeminiNano.state
             section(footer = when (st) {
-                com.gr4nt.iboard.ai.GeminiNano.State.UNAVAILABLE -> "This phone can't run Gemini Nano. It needs a supported phone (for example Pixel 9 or later, Galaxy S25 or later, or a recent Xiaomi, OPPO, vivo or Honor flagship) with Google's AICore system app and a locked bootloader. Without it, iBoard types normally without AI." +
+                com.gr4nt.iboard.ai.GeminiNano.State.UNAVAILABLE -> "This phone can't run Gemini Nano. It needs a supported phone (for example Pixel 9 or later, Galaxy S25 or later, or a recent Xiaomi, OPPO, vivo or Honor flagship) with Google's AICore system app and a locked bootloader. Without it, iBoard uses its built-in prediction and the offline Whisper voice model; translation and the ✨ writing tools need Gemini Nano." +
                     (com.gr4nt.iboard.ai.GeminiNano.lastError?.let { "\n\nDetails: $it" } ?: "")
                 else -> "Gemini Nano is Google's on-device model. Android's AICore installs and updates it; iBoard never ships or uploads it, and your text stays on this phone."
             }) {
@@ -215,8 +281,8 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 }
             }
-            section("Uses", "Word prediction suggests completions, corrections and next words. The ✨ tools sit behind the translate key: Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. Dictation uses on-device speech recognition.") {
-                switchRow(Icons.Kind.BOOK, indigo, "Word Prediction", sp.getBoolean(IBoardService.PREF_AI_PREDICT, true)) { putBool(IBoardService.PREF_AI_PREDICT, it) }
+            section("Uses", "Gemini Nano predictions are added to iBoard's built-in ones. The ✨ tools sit behind the translate key: Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. Dictation uses Gemini Nano speech recognition, or the offline Whisper model when this phone doesn't have it.") {
+                switchRow(Icons.Kind.BOOK, indigo, "Gemini Nano Predictions", sp.getBoolean(IBoardService.PREF_AI_PREDICT, true)) { putBool(IBoardService.PREF_AI_PREDICT, it) }
                 switchRow(Icons.Kind.MIC, blue, "Dictation", sp.getBoolean("voice_typing", true)) { putBool("voice_typing", it) }
             }
         }
@@ -347,13 +413,21 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        l.section("Gemini Nano", "Prediction, dictation, translation and writing tools all run on Gemini Nano on this phone. Phones without Gemini Nano type normally without AI.") {
+        l.section("Gemini Nano & prediction", "Where the phone has Gemini Nano it powers dictation, translation and the ✨ writing tools and adds to word prediction. Every phone gets iBoard's built-in prediction and offline Whisper dictation.") {
             navRow(Icons.Kind.SPARKLE, purple, "Gemini Nano", when (com.gr4nt.iboard.ai.GeminiNano.state) {
                 com.gr4nt.iboard.ai.GeminiNano.State.AVAILABLE -> "Ready"
                 com.gr4nt.iboard.ai.GeminiNano.State.UNAVAILABLE -> "Not supported"
                 com.gr4nt.iboard.ai.GeminiNano.State.UNKNOWN -> null
                 else -> "Not installed"
             }, subtitle = "Status, download and features") { nanoPage() }
+            navRow(Icons.Kind.BOOK, indigo, "Word Prediction", "Built in",
+                subtitle = "Touch-aware corrections + context model") {
+                AlertDialog.Builder(this@SettingsActivity).setTitle("Built-in word prediction")
+                    .setMessage("Works on every phone, offline. Corrections use where your finger actually landed on each key, so a tap on the edge between two letters counts for both. Built-in models use the last two words to rank completions and predict the next word, and your own words and phrases are learned on this phone (reset below). Where Gemini Nano is ready, its predictions are added too.\n\nContext models trained on Tatoeba contributor sentences (CC BY 2.0 FR). https://tatoeba.org/en/downloads")
+                    .setPositiveButton("Done", null).show()
+            }
+            navRow(Icons.Kind.MIC, orange, "Offline Voice Model", com.gr4nt.iboard.voice.SpeechModels.active(this@SettingsActivity)?.title ?: "Not downloaded",
+                subtitle = "Whisper, for dictation on phones without Gemini Nano") { voiceModelsPage() }
             navRow(Icons.Kind.MIC, teal, "Microphone Access",
                 if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) "Allowed" else "Off",
                 subtitle = "Tap the mic beside the globe to dictate") {
@@ -412,10 +486,21 @@ class SettingsActivity : AppCompatActivity() {
 
         l.section("Typing", "Double-tapping the space bar inserts a period.") {
             switchRow(Icons.Kind.SHIFT, green, "Auto-Capitalization", prefs.autoCap) { putBool(Prefs.AUTO_CAP, it) }
+            switchRow(Icons.Kind.CHECK, blue, "Auto-Correction", prefs.autoCorrect) { putBool(Prefs.AUTO_CORRECT, it) }
             switchRow(Icons.Kind.TEXT_AA, orange, "“.” Shortcut", prefs.doubleSpacePeriod) { putBool(Prefs.DOUBLE_SPACE, it) }
+            switchRow(Icons.Kind.BOOK, indigo, "Learn My Words", prefs.learnWords) { putBool(Prefs.LEARN, it) }
             switchRow(Icons.Kind.WAVE, pink, "Haptic Feedback", prefs.haptics) { putBool(Prefs.HAPTICS, it) }
             switchRow(Icons.Kind.SPEAKER, gray, "Key Sounds", prefs.sound) { putBool(Prefs.SOUND, it) }
         }
+        l.section(footer = "Learned words stay on this phone.") {
+            actionRow("Reset Learned Words", p.red) {
+                confirm("Reset learned words?", "Predictions will forget the words and phrases you've typed.", "Reset") {
+                    IBoardService.resetLearned(this@SettingsActivity)
+                    toast("Learned words cleared")
+                }
+            }
+        }
+
         val langs = prefs.languages.joinToString(", ") { Prefs.languageLabel(it) }
         l.section("Languages", "Tap 🌐 on the keyboard to switch. Long-press 🌐 to choose another keyboard app.") {
             navRow(Icons.Kind.GLOBE, blue, "Keyboards", langs) { languagesPage() }
@@ -426,8 +511,8 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction, dictation, translation and the writing tools run on this phone with Gemini Nano. Nothing you type or say is uploaded. The internet is used only for the optional stickers and GIFs.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard's AI features use Gemini Nano, which runs inside Android's AICore system service on this phone. Your text and voice are processed on the phone and are not sent to iBoard or to Google by iBoard. Android installs and updates Gemini Nano itself. iBoard connects to the internet only to download the optional stickers and GIFs. Microphone access is optional and used only for dictation you start; audio is not saved. Password fields turn suggestions and AI tools off. Clipboard history can be turned off here.").setPositiveButton("Done", null).show() }
+        l.section("Privacy", "Typing, prediction, dictation, translation and the writing tools run on this phone. Nothing you type or say is uploaded. The internet is used only to download the offline voice model and the optional stickers and GIFs.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard's AI features use Gemini Nano, which runs inside Android's AICore system service on this phone. Your text and voice are processed on the phone and are not sent to iBoard or to Google by iBoard. Android installs and updates Gemini Nano itself. iBoard connects to the internet only to download the offline Whisper voice model (from Hugging Face) and the optional stickers and GIFs. Built-in prediction and learned words stay on this phone. Microphone access is optional and used only for dictation you start; audio is not saved. Password fields turn suggestions and AI tools off. Clipboard history can be turned off here.").setPositiveButton("Done", null).show() }
         }
 
         l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
@@ -443,7 +528,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nAI: Gemini Nano (on-device, via Android AICore) · Emoji: AURA Emoji"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nAI: Gemini Nano (via Android AICore) · Word lists: FrequencyWords · Context: Tatoeba\nOffline speech: OpenAI Whisper / whisper.cpp · Emoji: AURA Emoji"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER
@@ -491,7 +576,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun languagesPage() {
         lateinit var page: View
         fun build(): View = subPage("Keyboards") {
-            section(footer = "Choose the keyboards you type in. Gemini Nano predicts in each of them.") {
+            section(footer = "Choose the keyboards you type in. Each has its own dictionary and predictions.") {
                 val chosen = prefs.languages.toMutableSet()
                 Prefs.ALL_LANGS.forEach { code ->
                     checkRow("${Prefs.languageLabel(code)}  ·  ${Prefs.languageName(code)}", code in chosen) {

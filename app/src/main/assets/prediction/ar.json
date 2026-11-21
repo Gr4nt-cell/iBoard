@@ -1,0 +1,13 @@
+{
+  "lang": "ar",
+  "url": "https://downloads.tatoeba.org/exports/per_language/ara/ara_sentences.tsv.bz2",
+  "sentences": 56666,
+  "heldout_sentences": 2000,
+  "heldout_words": 7219,
+  "top3_accuracy": 0.16013298240753568,
+  "context_coverage": 0.7771159440365701,
+  "bigrams": 14604,
+  "trigrams": 10813,
+  "corpus_prefix_sha256": "7ac8b6ea08ba1b2a4f49210233654183fc149ef7f5052d175fd6d091638b4e77",
+  "sha256": "66a2c714f562eed34f4591a59172b2f731663cc6279ff9e9c4b5145abce18087"
+}

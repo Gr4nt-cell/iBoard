@@ -1,0 +1,13 @@
+{
+  "lang": "ko",
+  "url": "https://downloads.tatoeba.org/exports/per_language/kor/kor_sentences.tsv.bz2",
+  "sentences": 12851,
+  "heldout_sentences": 1252,
+  "heldout_words": 3899,
+  "top3_accuracy": 0.0933572710951526,
+  "context_coverage": 0.5003847140292382,
+  "bigrams": 3190,
+  "trigrams": 937,
+  "corpus_prefix_sha256": "2de057d516c7377d260e4d0148451480784d859b55470b08febc24bfd838a375",
+  "sha256": "25f36d0756467b91823fb6969d941d31d2fb7b91034831107edfb0728cd12c49"
+}

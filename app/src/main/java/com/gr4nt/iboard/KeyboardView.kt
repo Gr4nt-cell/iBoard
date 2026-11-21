@@ -148,6 +148,20 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     private class KeyBox(val key: Key, val rect: RectF, val row: Int)
 
     private val boxes = ArrayList<KeyBox>()
+
+    /** Where the finger landed for the last letter key, for touch-aware correction. */
+    var lastTouch: com.gr4nt.iboard.predict.SpatialModel.Point? = null
+        private set
+
+    /** Positions of the letter keys as laid out now, or null when this isn't a letter layout. */
+    fun spatialModel(): com.gr4nt.iboard.predict.SpatialModel? {
+        val letters = boxes.filter { it.key.type == KeyType.CHAR && it.key.label.length == 1 && it.key.label[0].isLetter() }
+        if (letters.size < 10) return null
+        val centers = letters.associate { it.key.label.lowercase()[0] to com.gr4nt.iboard.predict.SpatialModel.Point(it.rect.centerX(), it.rect.centerY()) }
+        val w = letters.map { it.rect.width() }.sorted()[letters.size / 2]
+        val h = letters.map { it.rect.height() }.sorted()[letters.size / 2]
+        return com.gr4nt.iboard.predict.SpatialModel(centers, w + keyGap, h + rowGap)
+    }
     private val capsule = RectF()
     private val utilityCapsules = HashMap<Int, List<RectF>>()
     private var capsuleShader: Shader? = null
@@ -1042,10 +1056,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             val alt = popupAlts.getOrNull(p.altIndex)
             popupOwner = null
             popupAlts = emptyList()
+            lastTouch = null
             if (commit && alt != null) listener.onText(alt)
             return
         }
         if (!commit || p.longPressed || p.trackpad) return
+        lastTouch = if (k.type == KeyType.CHAR) com.gr4nt.iboard.predict.SpatialModel.Point(p.downX, p.downY) else null
         when (k.type) {
             KeyType.BACKSPACE, KeyType.SHIFT -> {}
             else -> listener.onKey(k)

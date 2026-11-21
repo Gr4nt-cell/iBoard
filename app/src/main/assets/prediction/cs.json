@@ -1,0 +1,13 @@
+{
+  "lang": "cs",
+  "url": "https://downloads.tatoeba.org/exports/per_language/ces/ces_sentences.tsv.bz2",
+  "sentences": 84040,
+  "heldout_sentences": 2000,
+  "heldout_words": 6543,
+  "top3_accuracy": 0.19058535839828825,
+  "context_coverage": 0.8717713587039584,
+  "bigrams": 18531,
+  "trigrams": 19600,
+  "corpus_prefix_sha256": "95387b26ce414fb49fba235e4dc7991a8a9b260fda8aa783cc4ea868a8a9f2f2",
+  "sha256": "593c804da21904a75fc088f0496fb26295f758c89d8e268152e86de0fb8d8134"
+}

@@ -21,7 +21,11 @@ import com.gr4nt.iboard.clipboard.ClipboardPanel
 import com.gr4nt.iboard.clipboard.ClipboardStore
 import com.gr4nt.iboard.emoji.EmojiPanel
 import com.gr4nt.iboard.ai.GeminiNano
+import com.gr4nt.iboard.predict.Dictionary
+import com.gr4nt.iboard.predict.SpatialModel
+import com.gr4nt.iboard.predict.Suggester
 import com.gr4nt.iboard.predict.Suggestion
+import com.gr4nt.iboard.predict.UserModel
 import com.gr4nt.iboard.settings.SettingsActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +62,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var noAutoCorrect = false
     private var ownCaps = true
 
+    private var suggester: Suggester? = null
     private var predictJob: Job? = null
+    /** Where the finger landed for each letter typed (null = unknown), with the letters themselves. */
+    private val touchTrail = ArrayList<SpatialModel.Point?>()
+    private val trailText = StringBuilder()
+    private fun clearTrail() { touchTrail.clear(); trailText.setLength(0) }
     private var shown: List<Suggestion> = emptyList()
     private var pendingAutoCorrect: String? = null
     private var lastAutoCorrect: Triple<String, String, String>? = null // original, replacement, separator
@@ -69,6 +78,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     // Session IDs isolate the active editor. Late results never reach another field.
     @Volatile private var voiceSession = 0L
     private var speech: com.gr4nt.iboard.voice.NanoSpeech? = null
+    /** Set once AICore says it has no speech recognition: dictation then uses offline Whisper. */
+    private var nanoSpeechMissing = false
+    private var recorder: com.gr4nt.iboard.voice.PauseChunker? = null
+    private var voiceJob: Job? = null
+    @Volatile private var voiceModel: com.gr4nt.iboard.voice.WhisperLib.Model? = null
+    private var voiceQueue: kotlinx.coroutines.channels.Channel<FloatArray>? = null
 
     private fun toast(message: String) { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
 
@@ -81,12 +96,28 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun cancelVoice() {
         speech?.let { it.cancel(); speech = null; currentInputConnection?.finishComposingText() }
         voiceSession++
+        voiceModel?.cancel()
+        voiceModel = null
+        recorder?.stop()
+        recorder = null
+        voiceQueue?.cancel()
+        voiceQueue = null
+        voiceJob?.cancel()
+        voiceJob = null
         voiceMessage(null)
     }
 
     private fun toggleVoice() {
         finishComposer()
         speech?.let { it.stop(); voiceMessage("Finishing… Tap mic to cancel"); speech = null; return }
+        if (voiceJob?.isActive == true) {
+            if (recorder != null) {
+                recorder?.stop()
+                recorder = null
+                voiceMessage("Finishing offline… Tap mic to cancel")
+            } else cancelVoice()
+            return
+        }
         if (password || emojiQuery != null || translateBuf != null) { toast("Dictation is unavailable here"); return }
         if (!prefs.sp.getBoolean("voice_typing", true)) { toast("Enable dictation in Settings"); return }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -94,7 +125,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
-        startVoice()
+        // Gemini Nano speech recognition where AICore has it; otherwise the offline Whisper model.
+        if (nanoSpeechMissing) startOfflineVoice() else startVoice()
     }
 
     /** Dictation with Gemini Nano speech recognition (AICore): words appear as you speak. */
@@ -130,12 +162,103 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                     if (composing) connection.finishComposingText()
                     speech = null
                     voiceMessage(null)
-                    if (error != null) toast(error)
+                    if (error == com.gr4nt.iboard.voice.NanoSpeech.UNAVAILABLE) {
+                        nanoSpeechMissing = true
+                        startOfflineVoice()
+                    } else if (error != null) toast(error)
                 }
             })
         speech = recognizer
         voiceMessage("Starting dictation…")
         recognizer.start()
+    }
+
+    private fun startOfflineVoice() {
+        val session = ++voiceSession
+        val connection = currentInputConnection ?: return
+        val language = lang
+        val queue = kotlinx.coroutines.channels.Channel<FloatArray>(3)
+        voiceQueue = queue
+        voiceMessage("Preparing voice model…")
+        voiceJob = scope.launch {
+            var model: com.gr4nt.iboard.voice.WhisperLib.Model? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val chosen = com.gr4nt.iboard.voice.SpeechModels.active(this@IBoardService, install = true)
+                        ?: throw NoVoiceModel()
+                    model = com.gr4nt.iboard.voice.WhisperLib.load(com.gr4nt.iboard.voice.SpeechModels.file(this@IBoardService, chosen).path)
+                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings › Voice Model.")
+                }
+                val loaded = model ?: error("Unable to load offline speech")
+                voiceModel = loaded
+                if (session != voiceSession || !isInputViewShown) return@launch
+                val capture = com.gr4nt.iboard.voice.PauseChunker(
+                    onChunk = { samples ->
+                        if (session == voiceSession && queue.trySend(samples).isFailure) {
+                            scope.launch { if (session == voiceSession) { toast("Speech processing is catching up. Please try a shorter phrase."); cancelVoice() } }
+                        }
+                    },
+                    onLevel = {},
+                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offline… Tap mic to cancel") } } },
+                    onError = { scope.launch { if (session == voiceSession) { toast("Microphone unavailable. Check microphone access."); cancelVoice() } } },
+                    onFinished = { queue.close() },
+                )
+                recorder = capture
+                if (!capture.start()) error("Cannot open microphone. Check microphone access.")
+                voiceMessage("Listening offline · Tap mic to finish")
+                var committed = false
+                for (samples in queue) {
+                    val started = SystemClock.elapsedRealtime()
+                    val progress = launch {
+                        while (session == voiceSession) {
+                            val seconds = (SystemClock.elapsedRealtime() - started) / 1000
+                            val percent = loaded.progress().let { if (it in 1..99) " · $it%" else "" }
+                            val action = if (recorder != null) "mic finishes" else "mic cancels"
+                            keyboard?.voiceStatus = "Transcribing$percent · ${seconds}s · $action"
+                            delay(500)
+                        }
+                    }
+                    val text = try {
+                        withContext(Dispatchers.IO) {
+                            loaded.transcribe(samples, language,
+                                if (prefs.sp.getBoolean(com.gr4nt.iboard.voice.VoiceVocabulary.PREF_LEARN, true)) com.gr4nt.iboard.voice.VoiceVocabulary.prompt(this@IBoardService, language)
+                                else com.gr4nt.iboard.voice.WhisperLib.promptFor(language))
+                        }
+                    } finally { progress.cancel() }
+                    if (session != voiceSession || currentInputConnection !== connection || !isInputViewShown) break
+                    if (text.isNotBlank()) {
+                        connection.finishComposingText()
+                        val preceding = connection.getTextBeforeCursor(1, 0)?.lastOrNull()
+                        val prefix = if (preceding != null && !preceding.isWhitespace()) " " else ""
+                        if (!connection.commitText(prefix + text + " ", 1)) error("This app did not accept the dictated text")
+                        committed = true
+                        refresh()
+                    }
+                    voiceMessage(if (recorder != null) "Listening offline · Tap mic to finish" else "Finishing offline · Tap mic to cancel")
+                }
+                if (!committed && session == voiceSession) toast("No speech recognized. Please try again closer to the microphone.")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: NoVoiceModel) {
+                if (session == voiceSession) {
+                    toast("Download a voice model first: Settings › Voice Model")
+                    runCatching {
+                        startActivity(Intent(this@IBoardService, com.gr4nt.iboard.settings.SettingsActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("open", "voice_model"))
+                    }
+                }
+            } catch (e: Exception) {
+                if (session == voiceSession) toast(e.message ?: "Offline dictation failed")
+            } finally {
+                // withContext waits for native inference to finish before freeing the model.
+                model?.let { loaded -> withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { loaded.close() } }
+                if (session == voiceSession) {
+                    voiceModel = null
+                    recorder?.stop(); recorder = null; queue.cancel(); voiceQueue = null
+                    voiceMessage(null)
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -169,6 +292,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         prefs.sp.unregisterOnSharedPreferenceChangeListener(prefListener)
         liveBlur?.close()
         clipStore.stop()
+        suggester?.user?.save()
         translator?.close()
         GeminiNano.close()
         scope.cancel()
@@ -321,6 +445,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         endEmojiSearch()
         keyboard?.cancelTouches()
         closeAiMenu()
+        suggester?.user?.save()
     }
 
     override fun onUpdateSelection(
@@ -420,9 +545,17 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun setLanguage(code: String, rebuild: Boolean) {
         finishComposer()
         lang = code
-        if (code == "zh" && pinyinEngine == null) scope.launch {
-            val e = withContext(Dispatchers.Default) { com.gr4nt.iboard.input.PinyinEngine.load(applicationContext) }
-            pinyinEngine = e
+        suggester = loaded[code]
+        if (code == "zh") {
+            if (pinyinEngine == null) scope.launch {
+                val e = withContext(Dispatchers.Default) { com.gr4nt.iboard.input.PinyinEngine.load(applicationContext) }
+                pinyinEngine = e
+            }
+        } else if (suggester == null) {
+            scope.launch {
+                val s = withContext(Dispatchers.Default) { loadSuggester(applicationContext, code) }
+                if (lang == code) { suggester = s; s.spatial = keyboard?.spatialModel(); refresh() }
+            }
         }
         if (rebuild) { updateLayout(); refresh() }
     }
@@ -462,7 +595,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onKey(key: Key) {
         if (key.type == KeyType.MIC) { toggleVoice(); return }
-        if (speech != null) cancelVoice()
+        if (speech != null || voiceJob?.isActive == true) cancelVoice()
         // The translate key opens Gemini Nano's tools: translate, fix grammar, rewrite…
         if (key.type == KeyType.TRANSLATE) {
             when {
@@ -512,7 +645,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             return
         }
         when (key.type) {
-            KeyType.CHAR -> typeText(key.label)
+            KeyType.CHAR -> typeText(key.label, keyboard?.lastTouch)
             KeyType.SPACE -> onSpace()
             KeyType.RETURN -> onReturn()
             KeyType.TO_NUMBER_PAD -> setPage(Page.NUMBER_PAD)
@@ -578,6 +711,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         if (!selected.isNullOrEmpty()) {
             ic.commitText("", 1); return
         }
+        if (touchTrail.isNotEmpty()) { touchTrail.removeAt(touchTrail.lastIndex); trailText.setLength(touchTrail.size) }
         val before = ic.getTextBeforeCursor(64, 0)?.toString() ?: ""
         // Undo the last autocorrect, like tapping the original word on iOS.
         val lac = lastAutoCorrect
@@ -586,6 +720,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             ic.deleteSurroundingText(lac.second.length + lac.third.length, 0)
             ic.commitText(lac.first, 1)
             ic.endBatchEdit()
+            if (!incognito && prefs.learnWords) suggester?.user?.trust(lac.first)
             lastAutoCorrect = null
             return
         }
@@ -640,10 +775,13 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 if (word.isNotEmpty()) ic.deleteSurroundingText(word.length, 0)
                 ic.commitText(s.text + " ", 1)
                 spaceAutoInserted = true
+                if (s.kind == Suggestion.Kind.LITERAL && !incognito && prefs.learnWords) suggester?.user?.trust(s.text)
+                learn(s.text)
             }
         }
         ic.endBatchEdit()
         lastAutoCorrect = null
+        clearTrail()
         if (page != Page.LETTERS) setPage(Page.LETTERS)
     }
 
@@ -880,8 +1018,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     // ------------------------------------------------------------ typing
 
-    private fun typeText(raw: String) {
+    private fun typeText(raw: String, touch: SpatialModel.Point? = null) {
         val ic = currentInputConnection ?: return
+        if (raw.length == 1 && raw[0].isLetter()) { touchTrail.add(touch); trailText.append(raw[0].lowercaseChar()) }
+        else if (raw.any { !it.isLetter() && it != '\'' }) clearTrail()
+        if (touchTrail.size > 48) { touchTrail.removeAt(0); trailText.deleteCharAt(0) }
         var text = raw
         if (page == Page.LETTERS && shift != ShiftState.OFF && text.length == 1) text = Layouts.shifted(text, lang)
         if (compose(ic, text)) { lastAutoCorrect = null; afterType(text); return }
@@ -900,6 +1041,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 val b = ic.getTextBeforeCursor(1, 0)
                 if (b == " ") ic.deleteSurroundingText(1, 0)
             }
+            val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
+            if (word.isNotEmpty()) learn(word)
         }
         ic.commitText(text, 1)
         ic.endBatchEdit()
@@ -926,6 +1069,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         ic.commitText(target + separator, 1)
         lastAutoCorrect = Triple(word, target, separator)
         pendingAutoCorrect = null
+        learn(target)
         return target
     }
 
@@ -957,7 +1101,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         lastSpaceAt = now
         ic.beginBatchEdit()
         val corrected = applyAutoCorrect(ic, " ")
+        clearTrail()
         if (corrected == null) {
+            val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
+            if (word.isNotEmpty()) learn(word)
             ic.commitText(" ", 1)
             lastAutoCorrect = null
         }
@@ -972,6 +1119,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         if (pinyin.isNotEmpty()) { finishComposer(); return }
         finishComposer()
         val info = currentInputEditorInfo
+        val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
+        if (word.isNotEmpty()) learn(word)
+        clearTrail()
         lastAutoCorrect = null
         spaceAutoInserted = false
         val opts = info?.imeOptions ?: 0
@@ -987,6 +1137,19 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         }
+    }
+
+    private fun learn(word: String) {
+        if (!prefs.learnWords || incognito || password) return
+        val s = suggester ?: return
+        val before = currentInputConnection?.getTextBeforeCursor(120, 0)?.toString() ?: ""
+        val tokens = before.trimEnd().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        // The word may already be committed; the one before it is the context.
+        val prev = if (tokens.lastOrNull()?.trimEnd('.', ',', '!', '?') == word) tokens.getOrNull(tokens.size - 2)
+        else tokens.lastOrNull()
+        val committed = tokens.lastOrNull()?.trimEnd('.', ',', '!', '?')?.equals(word, true) == true
+        val prev2 = tokens.getOrNull(tokens.size - if (committed) 3 else 2)
+        s.user.learn(word, prev?.trim { !it.isLetter() }, prev2?.trim { !it.isLetter() })
     }
 
     // ------------------------------------------------------------ suggestions
@@ -1025,36 +1188,59 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         kv.shift = shift
     }
 
+    /**
+     * Built-in engine first (instant, every phone, drives autocorrect); where Gemini Nano is ready
+     * its predictions are merged in a moment later.
+     */
     private fun refreshSuggestions() {
         keyboard ?: return
         val ic = currentInputConnection ?: return
         predictJob?.cancel()
-        pendingAutoCorrect = null
-        if (password || lang == "zh") { show(emptyList()); return }
+        if (password || lang == "zh") { pendingAutoCorrect = null; show(emptyList()); return }
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
         val word = currentWord(before)
         val head = before.substring(0, before.length - word.length)
+        val context = com.gr4nt.iboard.predict.PredictionContext.from(head)
+        val s = suggester
+        if (s != null && word.isNotEmpty()) s.spatial = keyboard?.spatialModel()
+        // The touch points of the letters in this word (older or missing ones are unknown).
+        if (word.isEmpty()) clearTrail()
+        // Use the recorded taps only when they really are the letters of this word.
+        val lw = word.lowercase()
+        val touches: List<SpatialModel.Point?>? = when {
+            word.isEmpty() || trailText.isEmpty() -> null
+            trailText.length >= lw.length && trailText.endsWith(lw) -> touchTrail.takeLast(lw.length)
+            lw.endsWith(trailText) -> List(lw.length - trailText.length) { null } + touchTrail
+            else -> null
+        }
+        pendingAutoCorrect = null
+        val local: List<Suggestion> = if (word.isNotEmpty()) {
+            if (s == null) listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else {
+                val r = s.forWord(word, context.previous, prefs.autoCorrect && !noAutoCorrect && lang !in noAutoCorrectLangs,
+                    context.sentenceStart, context.before, touches)
+                pendingAutoCorrect = r.autoCorrect
+                r.items
+            }
+        } else s?.nextWords(context.previous, context.sentenceStart, context.before) ?: emptyList()
+
         val clip = if (word.isEmpty() && prefs.clipboardHistory) clipStore.recent(90_000)
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
-        val base = buildList {
-            if (clip != null) add(Suggestion(clip.text, Suggestion.Kind.CLIP))
-            if (word.isNotEmpty()) add(Suggestion(word, Suggestion.Kind.LITERAL))
-        }
-        // While Gemini Nano works out the next words, keep earlier ones that still match what is typed.
-        val keep = if (word.isEmpty()) emptyList() else shown.filter {
-            it.kind == Suggestion.Kind.WORD && it.text.startsWith(word, ignoreCase = true) && !it.text.equals(word, ignoreCase = true)
-        }
-        show((base + keep).take(3))
-        if (!prefs.sp.getBoolean(PREF_AI_PREDICT, true) || GeminiNano.state == GeminiNano.State.UNAVAILABLE) return
+        val base = if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3)
+        show(base)
+
+        if (!prefs.sp.getBoolean(PREF_AI_PREDICT, true) || !GeminiNano.ready) return
         if (word.isEmpty() && head.isBlank()) return
         val session = editorSession
+        val autoCorrect = pendingAutoCorrect
         predictJob = scope.launch {
-            delay(if (word.isEmpty()) 220 else 120)
+            delay(if (word.isEmpty()) 220 else 140)
             val words = GeminiNano.predict(head, word, lang)
-            if (editorSession != session || currentInputConnection !== ic) return@launch
-            val ai = words.filter { w -> !w.equals(word, ignoreCase = true) && base.none { it.text.equals(w, ignoreCase = true) } }
-                .map { Suggestion(it, Suggestion.Kind.WORD) }
-            show((base + ai).take(3))
+            if (editorSession != session || currentInputConnection !== ic || pendingAutoCorrect != autoCorrect) return@launch
+            // Keep the typed word, the clipboard chip and any autocorrect; fill the rest from Gemini Nano.
+            val fixed = base.filter { it.kind == Suggestion.Kind.LITERAL || it.kind == Suggestion.Kind.CLIP || it.autoCorrect }
+            val nano = words.filter { w -> fixed.none { it.text.equals(w, ignoreCase = true) } }.map { Suggestion(it, Suggestion.Kind.WORD) }
+            val rest = base.filter { it !in fixed && nano.none { n -> n.text.equals(it.text, ignoreCase = true) } }
+            show((fixed + nano + rest).take(3))
         }
     }
 
@@ -1075,7 +1261,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             when (GeminiNano.refresh()) {
                 GeminiNano.State.UNAVAILABLE -> {
                     closeAiMenu()
-                    toast("Gemini Nano isn't available on this phone. It needs a supported phone with AICore and a locked bootloader.")
+                    toast("The ✨ tools need Gemini Nano, which this phone doesn't have (it needs AICore and a locked bootloader). Prediction and dictation still work offline.")
                 }
                 GeminiNano.State.DOWNLOADABLE, GeminiNano.State.DOWNLOADING ->
                     toast("Gemini Nano isn't installed yet. Open iBoard Settings › Gemini Nano to get it.")
@@ -1199,6 +1385,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         }
         val next = langs[(langs.indexOf(lang) + 1) % langs.size]
         prefs.currentLanguage = next
+        suggester?.user?.save()
         setLanguage(next, rebuild = true)
         keyboard?.flashSpaceLabel()
     }
@@ -1226,5 +1413,28 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     companion object {
         /** Settings switch for Gemini Nano word prediction. */
         const val PREF_AI_PREDICT = "nano_predict"
+
+        private val loaded = HashMap<String, Suggester>()
+
+        @Synchronized
+        fun loadSuggester(context: Context, code: String): Suggester {
+            loaded[code]?.let { return it }
+            val dict = Dictionary.load(context, code)
+            val rows = Layouts.letterRows[code] ?: Layouts.letterRows.getValue("en")
+            val s = Suggester(dict, UserModel(context, code), Suggester.neighborsFor(rows))
+            loaded[code] = s
+            return s
+        }
+
+        /** Called from settings after "clear learned words". */
+        fun resetLearned(context: Context) {
+            synchronized(this) {
+                Prefs.ALL_LANGS.forEach { code ->
+                    loaded[code]?.user?.clear() ?: UserModel(context, code).clear()
+                }
+            }
+        }
     }
 }
+
+private class NoVoiceModel : Exception("No voice model downloaded")
