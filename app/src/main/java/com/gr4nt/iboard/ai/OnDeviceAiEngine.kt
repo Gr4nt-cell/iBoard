@@ -79,11 +79,11 @@ class OnDeviceAiEngine {
     private suspend fun generate(instructions: String, input: String, maxTokens: Int): String {
         check(state() == State.AVAILABLE) { "Download or enable Gemini Nano on this device first" }
         val prompt = "$instructions\n\nText:\n<<<\n$input\n>>>"
-        val request = GenerateContentRequest.builder(TextPart(prompt))
-            .setTemperature(0.25f)
-            .setMaxOutputTokens(maxTokens)
-            .build()
-        return model.generateContent(request).candidates.firstOrNull()?.text.orEmpty().trim()
+        val builder = GenerateContentRequest.builder(TextPart(prompt))
+        builder.temperature = 0.25f
+        builder.maxOutputTokens = maxTokens
+        val response = model.generateContent(builder.build())
+        return response.candidates.firstOrNull()?.text.orEmpty().trim()
     }
 
     companion object {
