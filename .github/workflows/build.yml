@@ -36,37 +36,62 @@ jobs:
       - name: Prepare upload key (when the repository secrets are set)
         env:
           UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
-          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
-          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
-          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          SECRET_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          SECRET_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
           if [ -z "$UPLOAD_KEYSTORE_B64" ]; then echo "No upload key secrets: bundle will be unsigned."; exit 0; fi
-          ALIAS="$(echo -n "${UPLOAD_KEY_ALIAS:-upload}" | tr -d '[:space:]')"; ALIAS="${ALIAS:-upload}"
-          STORE_PW="$(echo -n "$UPLOAD_STORE_PASSWORD" | tr -d '\r\n')"
-          KEY_PW="$(echo -n "${UPLOAD_KEY_PASSWORD:-$STORE_PW}" | tr -d '\r\n')"; KEY_PW="${KEY_PW:-$STORE_PW}"
+          KS="$RUNNER_TEMP/upload.jks"
           # Tolerate spaces or line breaks pasted into the secret.
-          echo -n "$UPLOAD_KEYSTORE_B64" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/upload.jks" || true
-          echo "Secret lengths: keystore=${#UPLOAD_KEYSTORE_B64} store_password=${#UPLOAD_STORE_PASSWORD} key_password=${#UPLOAD_KEY_PASSWORD} alias=${#UPLOAD_KEY_ALIAS}"
-          if keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$STORE_PW" -alias "$ALIAS" >/dev/null 2>&1; then
-            keytool -list -v -keystore "$RUNNER_TEMP/upload.jks" -storepass "$STORE_PW" -alias "$ALIAS" | grep -m1 "SHA256:" || true
-            echo "UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
-            echo "Upload key OK (alias $ALIAS)."
-          else
-            echo "::warning title=Upload key not usable::The UPLOAD_* secrets don't open the keystore (check UPLOAD_STORE_PASSWORD and UPLOAD_KEY_ALIAS). Building an unsigned bundle instead."
-            rm -f "$RUNNER_TEMP/upload.jks"
+          echo -n "$UPLOAD_KEYSTORE_B64" | tr -d ' \r\n\t' | base64 -d > "$KS" 2>/dev/null || true
+          echo "Keystore: $(stat -c %s "$KS") bytes, $(file -b "$KS" | cut -c1-60)"
+          clean() { echo -n "$1" | tr -d '\r\n'; }
+          STORE_CAND=("$(clean "$SECRET_STORE_PASSWORD")" "$(clean "$SECRET_KEY_PASSWORD")" "$(clean "$SECRET_STORE_PASSWORD" | sed 's/[[:space:]]*$//')")
+          STORE_PW=""; STORE_FROM=""
+          for i in 0 1 2; do
+            pw="${STORE_CAND[$i]}"; [ -z "$pw" ] && continue
+            if keytool -list -keystore "$KS" -storepass "$pw" >/dev/null 2>&1; then STORE_PW="$pw"; STORE_FROM=$i; break; fi
+          done
+          if [ -z "$STORE_PW" ]; then
+            echo "::warning title=Upload key not usable::Neither UPLOAD_STORE_PASSWORD nor UPLOAD_KEY_PASSWORD opens the keystore in UPLOAD_KEYSTORE_B64. Building an unsigned bundle."
+            rm -f "$KS"; exit 0
           fi
+          echo "Keystore opened with $( [ "$STORE_FROM" = 1 ] && echo UPLOAD_KEY_PASSWORD || echo UPLOAD_STORE_PASSWORD )."
+          mapfile -t ALIASES < <(keytool -list -keystore "$KS" -storepass "$STORE_PW" 2>/dev/null | grep -i "PrivateKeyEntry" | cut -d, -f1)
+          echo "Key entries in keystore: ${#ALIASES[@]} (${ALIASES[*]})"
+          WANT="$(echo -n "$SECRET_KEY_ALIAS" | tr -d '[:space:]')"
+          ALIAS=""
+          for a in "${ALIASES[@]}"; do [ "${a,,}" = "${WANT,,}" ] && ALIAS="$a"; done
+          if [ -z "$ALIAS" ]; then ALIAS="${ALIASES[0]}"; echo "UPLOAD_KEY_ALIAS doesn't match a key entry; using '$ALIAS'."; fi
+          # Find the key password by signing a tiny test jar.
+          echo x > "$RUNNER_TEMP/t.txt"; (cd "$RUNNER_TEMP" && jar cf t.jar t.txt)
+          KEY_PW=""
+          for pw in "$(clean "$SECRET_KEY_PASSWORD")" "$STORE_PW"; do
+            [ -z "$pw" ] && continue
+            if jarsigner -keystore "$KS" -storepass "$STORE_PW" -keypass "$pw" "$RUNNER_TEMP/t.jar" "$ALIAS" >/dev/null 2>&1; then KEY_PW="$pw"; break; fi
+          done
+          if [ -z "$KEY_PW" ]; then
+            echo "::warning title=Upload key not usable::The keystore opens, but no secret unlocks key '$ALIAS'. Check UPLOAD_KEY_PASSWORD. Building an unsigned bundle."
+            rm -f "$KS"; exit 0
+          fi
+          keytool -list -v -keystore "$KS" -storepass "$STORE_PW" -alias "$ALIAS" | grep -m1 "SHA256:" || true
+          echo "::add-mask::$STORE_PW"; echo "::add-mask::$KEY_PW"
+          {
+            echo "UPLOAD_KEYSTORE_PATH=$KS"
+            echo "UPLOAD_STORE_PASSWORD=$STORE_PW"
+            echo "UPLOAD_KEY_PASSWORD=$KEY_PW"
+            echo "UPLOAD_KEY_ALIAS=$ALIAS"
+          } >> "$GITHUB_ENV"
+          echo "Upload key OK (alias $ALIAS)."
 
       - name: Run prediction and layout regression tests
         run: gradle :app:testReleaseUnitTest --stacktrace
 
       - name: Build APK
-        env:
-          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
-          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
-          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
           set -o pipefail
-          gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
+          # The sideload APK keeps the fixed iBoard key so phones can update it; only the bundle uses the upload key.
+          env -u UPLOAD_KEYSTORE_PATH gradle :app:assembleRelease --stacktrace 2>&1 | tee build.log
 
       - name: Preserve build failure log
         if: failure()
@@ -80,11 +105,6 @@ jobs:
         run: cp app/build/outputs/apk/release/app-release.apk iBoard.apk
 
       - name: Build Play bundle (.aab)
-        env:
-          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
-          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
-          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
-          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
           if [ -n "$UPLOAD_KEYSTORE_PATH" ]; then
             NAME=iBoard-signed.aab
