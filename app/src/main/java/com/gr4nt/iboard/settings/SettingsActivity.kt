@@ -55,8 +55,8 @@ class SettingsActivity : AppCompatActivity() {
         val pc = lib.progress(pack)
         return when {
             pc != null -> "$pc%"
-            lib.installed(this, pack) -> "On phone ✓"
-            else -> "Get · ${pack.mb} MB"
+            lib.installed(this, pack) -> "On phone â"
+            else -> "Get Â· ${pack.mb} MB"
         }
     }
     private var enableRow: TextView? = null
@@ -140,7 +140,7 @@ class SettingsActivity : AppCompatActivity() {
         addView(content)
     }
 
-    /** A sub-page with a "‹ Back" button and a centered title, like a pushed iOS screen. */
+    /** A sub-page with a "â¹ Back" button and a centered title, like a pushed iOS screen. */
     private fun subPage(title: String, build: IosList.() -> Unit): View {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = GlassBackdrop(com.gr4nt.iboard.KeyboardTheme.resolve(this@SettingsActivity, prefs).gradient) }
         val bar = FrameLayout(this)
@@ -183,11 +183,11 @@ class SettingsActivity : AppCompatActivity() {
                 models.all.forEach { m ->
                     val state = models.state(this@SettingsActivity, m)
                     val value = when (state) {
-                        is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> if (m.id == selected) "In use ✓" else "Use"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Installed -> if (m.id == selected) "In use â" else "Use"
                         is com.gr4nt.iboard.voice.SpeechModels.State.Downloading -> "${state.percent}%"
-                        is com.gr4nt.iboard.voice.SpeechModels.State.Verifying -> "Checking…"
+                        is com.gr4nt.iboard.voice.SpeechModels.State.Verifying -> "Checkingâ¦"
                         is com.gr4nt.iboard.voice.SpeechModels.State.Failed -> "Retry"
-                        else -> "Get · ${m.approxMb} MB"
+                        else -> "Get Â· ${m.approxMb} MB"
                     }
                     navRow(Icons.Kind.MIC, if (state is com.gr4nt.iboard.voice.SpeechModels.State.Installed) green else gray,
                         m.title, value, subtitle = (state as? com.gr4nt.iboard.voice.SpeechModels.State.Failed)?.reason ?: m.detail) {
@@ -247,6 +247,7 @@ class SettingsActivity : AppCompatActivity() {
         com.gr4nt.iboard.KeyType.GLOBE -> "Languages"
         com.gr4nt.iboard.KeyType.MIC -> "Dictation"
         com.gr4nt.iboard.KeyType.CLIPBOARD -> "Clipboard"
+        com.gr4nt.iboard.KeyType.AI_ASSIST -> "AI Assistant"
         else -> "Translator"
     }
 
@@ -256,14 +257,15 @@ class SettingsActivity : AppCompatActivity() {
         com.gr4nt.iboard.KeyType.GLOBE -> Icons.Kind.GLOBE
         com.gr4nt.iboard.KeyType.MIC -> Icons.Kind.MIC
         com.gr4nt.iboard.KeyType.CLIPBOARD -> Icons.Kind.CLIPBOARD
+        com.gr4nt.iboard.KeyType.AI_ASSIST -> Icons.Kind.SPARKLE
         else -> Icons.Kind.TRANSLATE
     }
 
-    /** Choose which of the six capsule buttons sit on the suggestion bar instead. */
+    /** Choose which capsule buttons sit on the suggestion bar instead. */
     private fun stripButtonsPage() {
         push(subPage("Suggestion Bar") {
             section(footer = "Turn a button on to move it from the icon capsule to the suggestion bar; turn it off to put it back in the capsule. Two fit on the suggestion bar: the first sits on the left, the second on the right.") {
-                val tints = listOf(gray, orange, blue, red, yellow, indigo)
+                val tints = listOf(gray, orange, blue, red, yellow, indigo, purple)
                 Prefs.DOCK_BUTTONS.forEachIndexed { i, t ->
                     lateinit var sw: IosSwitch
                     sw = switchRow(buttonIcon(t), tints[i], buttonName(t), t in prefs.stripButtons,
@@ -303,6 +305,62 @@ class SettingsActivity : AppCompatActivity() {
     private fun label(entries: List<String>, values: List<String>, value: String?): String =
         entries.getOrNull(values.indexOf(value)) ?: entries.first()
 
+    private fun onDeviceAiPage() {
+        val engine = com.gr4nt.iboard.ai.OnDeviceAiEngine()
+        lateinit var stateValue: TextView
+        fun label(state: com.gr4nt.iboard.ai.OnDeviceAiEngine.State) = when (state) {
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.AVAILABLE -> "Ready on phone"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.DOWNLOADABLE -> "Ready to download"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.DOWNLOADING -> "Downloading"
+            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE -> "Not supported"
+        }
+        val page = subPage("On-Device AI") {
+            section(footer = "Gemini Nano runs through Android AI Core on supported phones. Prepare the model here; writing assistance and AI predictions then work on-device, with no cloud fallback. Android may need internet to download the model.") {
+                stateValue = navRow(Icons.Kind.SPARKLE, purple, "Gemini Nano", "Checking…",
+                    subtitle = "On-device text generation") {
+                    lifecycleScope.launch {
+                        stateValue.text = "Checking…"
+                        val state = engine.state()
+                        stateValue.text = label(state)
+                    }
+                }
+                actionRow("Prepare or download model", purple, Icons.Kind.SPARKLE, purple) {
+                    lifecycleScope.launch {
+                        when (engine.state()) {
+                            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.AVAILABLE -> {
+                                stateValue.text = "Ready on phone"
+                                toast("Gemini Nano is already ready")
+                            }
+                            com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE -> {
+                                stateValue.text = "Not supported"
+                                toast("Gemini Nano is not available on this phone")
+                            }
+                            else -> {
+                                stateValue.text = "Preparing…"
+                                try {
+                                    engine.download { progress ->
+                                        runOnUiThread { stateValue.text = progress }
+                                    }
+                                    stateValue.text = "Ready on phone"
+                                } catch (_: Exception) {
+                                    val state = engine.state()
+                                    stateValue.text = label(state)
+                                    toast(if (state == com.gr4nt.iboard.ai.OnDeviceAiEngine.State.UNAVAILABLE)
+                                        "Gemini Nano is not supported on this phone"
+                                    else "Couldn't prepare the model. Check internet and Android AI Core.")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        push(page)
+        lifecycleScope.launch {
+            stateValue.text = label(engine.state())
+        }
+    }
+
     // ------------------------------------------------------------ main page
 
     private fun mainPage(): View {
@@ -318,7 +376,7 @@ class SettingsActivity : AppCompatActivity() {
 
         l.section(footer = "Type here to try iBoard. Settings below apply to the keyboard instantly.") {
             custom(EditText(this@SettingsActivity).apply {
-                hint = "Try iBoard here…"
+                hint = "Try iBoard hereâ¦"
                 setTextColor(p.label)
                 setHintTextColor(p.secondary)
                 background = null
@@ -357,7 +415,7 @@ class SettingsActivity : AppCompatActivity() {
         val engine = sp.getString(com.gr4nt.iboard.voice.OnlineSpeech.PREF, "auto") ?: "auto"
         l.section("Voice typing & prediction", "Automatic uses online dictation (your phone's speech service, usually Google) when connected, and the offline Whisper model otherwise. Offline dictation never sends your voice anywhere.") {
             switchRow(Icons.Kind.MIC, blue, "Dictation", sp.getBoolean("voice_typing", true),
-                subtitle = "Online + offline Whisper · 6 keyboard languages") { putBool("voice_typing", it) }
+                subtitle = "Online + offline Whisper Â· 6 keyboard languages") { putBool("voice_typing", it) }
             navRow(Icons.Kind.WAVE, green, "Dictation Engine", engines.first { it.first == engine }.second,
                 subtitle = "Online is more accurate; offline is fully private") {
                 choicePage("Dictation Engine",
@@ -381,11 +439,17 @@ class SettingsActivity : AppCompatActivity() {
                 else startActivity(Intent(this@SettingsActivity, com.gr4nt.iboard.voice.MicrophonePermissionActivity::class.java))
             }
             navRow(Icons.Kind.BOOK, indigo, "Word Prediction", "On-device",
-                subtitle = "Trained context model + personal vocabulary") {
+                subtitle = "Gemini Nano when enabled; local fallback") {
                 AlertDialog.Builder(this@SettingsActivity).setTitle("On-device word prediction")
-                    .setMessage("Built-in models use the last two words to rank completions and predict the next word. Keyboard-aware corrections and your optional learned vocabulary work together in all six languages. Personal learning stays on this phone; reset it below.\n\nContext models trained on Tatoeba contributor sentences (CC BY 2.0 FR). https://tatoeba.org/en/downloads")
+                    .setMessage("When enabled and Gemini Nano is ready, the on-device model generates next-word suggestions. If the model is unavailable, iBoard falls back to its built-in context model. Prefix completion, keyboard-aware corrections, and optional learned vocabulary remain on this phone.\n\nThe bundled context model uses Tatoeba contributor sentences (CC BY 2.0 FR): https://tatoeba.org/en/downloads")
                     .setPositiveButton("Done", null).show()
             }
+            switchRow(Icons.Kind.SPARKLE, purple, "AI Next-Word Suggestions", prefs.aiPredictions,
+                subtitle = "Gemini Nano on this phone; local fallback") {
+                putBool(Prefs.AI_PREDICTIONS, it)
+            }
+            navRow(Icons.Kind.SPARKLE, purple, "On-Device AI Model", "Manage",
+                subtitle = "Check or download Gemini Nano") { onDeviceAiPage() }
         }
 
         l.section("Emoji", "Apps show typed emoji with your phone's own emoji font.") {
@@ -404,7 +468,7 @@ class SettingsActivity : AppCompatActivity() {
                 mediaRows[pack] = navRow(if (pack == com.gr4nt.iboard.emoji.MediaLibrary.Pack.GIFS) Icons.Kind.SPARKLE else Icons.Kind.SMILEY,
                     if (pack == com.gr4nt.iboard.emoji.MediaLibrary.Pack.GIFS) pink else purple, pack.title, mediaValue(pack)) {
                     when {
-                        lib.progress(pack) != null -> toast("Downloading…")
+                        lib.progress(pack) != null -> toast("Downloadingâ¦")
                         lib.installed(this@SettingsActivity, pack) -> confirm(pack.title, "Remove ${pack.title} from this phone? You can download them again any time.", "Remove") {
                             lib.remove(this@SettingsActivity, pack)
                         }
@@ -432,16 +496,16 @@ class SettingsActivity : AppCompatActivity() {
 
         l.section("Translator", "Tap the translate icon in the icon capsule, type in one language and the other appears in the app. Each language is downloaded once (about 30 MB) from Google, then translation runs on this phone, even offline.") {
             navRow(Icons.Kind.TRANSLATE, blue, "Languages",
-                com.gr4nt.iboard.translate.TranslatorEngine.short(sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_FROM, null) ?: prefs.currentLanguage) + " → " +
+                com.gr4nt.iboard.translate.TranslatorEngine.short(sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_FROM, null) ?: prefs.currentLanguage) + " â " +
                     com.gr4nt.iboard.translate.TranslatorEngine.short(sp.getString(com.gr4nt.iboard.translate.TranslatorEngine.PREF_TO, null) ?: "es"),
                 subtitle = "Change them on the translator bar") {
                 AlertDialog.Builder(this@SettingsActivity).setTitle("Translator")
-                    .setMessage("1. Tap the translate icon (A/文) in the icon capsule.\n2. Pick the languages on the bar that appears.\n3. Type: the translation is written into the app as you type. Return keeps it and starts a new sentence.\n\n${com.gr4nt.iboard.translate.TranslatorEngine.languages.size} languages. Translation uses Google ML Kit on this phone; your text is not uploaded.")
+                    .setMessage("1. Tap the translate icon (A/æ) in the icon capsule.\n2. Pick the languages on the bar that appears.\n3. Type: the translation is written into the app as you type. Return keeps it and starts a new sentence.\n\n${com.gr4nt.iboard.translate.TranslatorEngine.languages.size} languages. Translation uses Google ML Kit on this phone; your text is not uploaded.")
                     .setPositiveButton("Done", null).show()
             }
         }
 
-        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard and translator. Each button sits either in the capsule under the keys or on the suggestion bar.") {
+        l.section("Icon Capsule", "Settings, emoji, languages, microphone, clipboard, translator and iBoard AI. Each button sits either in the capsule under the keys or on the suggestion bar.") {
             switchRow(Icons.Kind.CAPSULE, blue, "Icon Capsule", prefs.utilityRow) { putBool(Prefs.UTILITY_ROW, it) }
             stripRow = navRow(Icons.Kind.CLIPBOARD, purple, "Buttons on Suggestion Bar", stripValue()) { stripButtonsPage() }
         }
@@ -449,7 +513,7 @@ class SettingsActivity : AppCompatActivity() {
         l.section("Typing") {
             switchRow(Icons.Kind.SHIFT, green, "Auto-Capitalization", prefs.autoCap) { putBool(Prefs.AUTO_CAP, it) }
             switchRow(Icons.Kind.CHECK, blue, "Auto-Correction", prefs.autoCorrect) { putBool(Prefs.AUTO_CORRECT, it) }
-            switchRow(Icons.Kind.TEXT_AA, orange, "“.” Shortcut", prefs.doubleSpacePeriod) { putBool(Prefs.DOUBLE_SPACE, it) }
+            switchRow(Icons.Kind.TEXT_AA, orange, "â.â Shortcut", prefs.doubleSpacePeriod) { putBool(Prefs.DOUBLE_SPACE, it) }
             switchRow(Icons.Kind.BOOK, indigo, "Learn My Words", prefs.learnWords) { putBool(Prefs.LEARN, it) }
             switchRow(Icons.Kind.WAVE, pink, "Haptic Feedback", prefs.haptics) { putBool(Prefs.HAPTICS, it) }
             switchRow(Icons.Kind.SPEAKER, gray, "Key Sounds", prefs.sound) { putBool(Prefs.SOUND, it) }
@@ -464,7 +528,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val langs = prefs.languages.joinToString(", ") { Prefs.languageLabel(it) }
-        l.section("Languages", "Tap 🌐 on the keyboard to switch. Long-press 🌐 to choose another keyboard app.") {
+        l.section("Languages", "Tap ð on the keyboard to switch. Long-press ð to choose another keyboard app.") {
             navRow(Icons.Kind.GLOBE, blue, "Keyboards", langs) { languagesPage() }
         }
 
@@ -473,11 +537,11 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "Keeps your last 40 copies") { putBool(Prefs.CLIP_HISTORY, it) }
         }
 
-        l.section("Privacy", "Typing, prediction and emoji work entirely on this phone. The internet is used to download voice and translation models and the optional stickers and GIFs, and for online dictation when it is on. The microphone is used only when you start dictation.") {
-            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to the internet to download voice models (from Hugging Face) and translation language packs (Google ML Kit), and for online dictation. Online dictation sends your voice to your phone's speech service (usually Google) to be transcribed; choose Offline in Dictation Engine to keep it on the phone. Translation runs on this phone and your text is not uploaded. Nothing you type is sent anywhere. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Dictionaries, emoji, corrections and learned words remain on this phone. Password fields disable suggestions; incognito fields do not teach the dictionary. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
+        l.section("Privacy", "Typing, prediction and iBoard AI run on this phone. Model downloads and optional online dictation require internet. The microphone is used only when you start dictation.") {
+            navRow(Icons.Kind.EYE_OFF, blue, "Privacy Policy", null) { AlertDialog.Builder(this@SettingsActivity).setTitle("Privacy").setMessage("iBoard connects to download voice and translation models, the optional on-device Gemini Nano model through Android AI Core, and optional stickers and GIFs. When available, Gemini Nano processes writing and prediction text on this phone; iBoard does not send that text to a cloud generation service. Model downloads may require internet. Online dictation sends your voice to your phone's speech service (usually Google); choose Offline to keep dictation on the phone. Translation runs on this phone. Microphone access is optional and used only for dictation started by you. Audio is processed in memory and is not saved. Password fields block iBoard AI and suggestions; incognito fields block iBoard AI and dictionary learning. Clipboard history can be disabled and learned words can be reset here.").setPositiveButton("Done", null).show() }
         }
 
-        l.section("App", "When hidden, open these settings from Settings › System › Keyboard › iBoard.") {
+        l.section("App", "When hidden, open these settings from Settings âº System âº Keyboard âº iBoard.") {
             switchRow(Icons.Kind.EYE_OFF, gray, "Hide App Icon", sp.getBoolean(Prefs.HIDE_ICON, false)) { hide ->
                 putBool(Prefs.HIDE_ICON, hide)
                 packageManager.setComponentEnabledSetting(
@@ -490,7 +554,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         l.root.addView(TextView(this).apply {
-            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords · Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp · Emoji: AURA Emoji"
+            text = "iBoard ${BuildConfig.VERSION_NAME}\nWord lists: FrequencyWords Â· Context: Tatoeba\nSpeech: OpenAI Whisper / whisper.cpp Â· Emoji: AURA Emoji"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(p.secondary)
             gravity = Gravity.CENTER
@@ -541,7 +605,7 @@ class SettingsActivity : AppCompatActivity() {
             section(footer = "Choose the keyboards you type in. Each has its own dictionary and predictions.") {
                 val chosen = prefs.languages.toMutableSet()
                 Prefs.ALL_LANGS.forEach { code ->
-                    checkRow("${Prefs.languageLabel(code)}  ·  ${Prefs.languageName(code)}", code in chosen) {
+                    checkRow("${Prefs.languageLabel(code)}  Â·  ${Prefs.languageName(code)}", code in chosen) {
                         if (code in chosen && chosen.size == 1) { toast("Keep at least one keyboard"); return@checkRow }
                         if (code in chosen) chosen -= code else chosen += code
                         sp.edit().putStringSet(Prefs.LANGUAGES, chosen.toSet()).apply()
@@ -621,7 +685,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::prefs.isInitialized) updateAppearance()
-        // Pick up changes made elsewhere (consent screen, keyboard ✨ button).
+        // Pick up changes made elsewhere (consent screen, keyboard â¨ button).
         if (stack.size == 1 && ::container.isInitialized) refreshMain()
         updateStatus()
 
@@ -649,8 +713,8 @@ class SettingsActivity : AppCompatActivity() {
             enabled -> "Step 2: switch to iBoard"
             else -> "Step 1: enable iBoard"
         }
-        enableRow?.apply { text = if (enabled) "Enabled ✓" else "Enable iBoard"; setTextColor(if (enabled) p.secondary else p.blue) }
-        useRow?.apply { text = if (current) "In Use ✓" else "Switch to iBoard"; setTextColor(if (current) p.secondary else p.blue) }
+        enableRow?.apply { text = if (enabled) "Enabled â" else "Enable iBoard"; setTextColor(if (enabled) p.secondary else p.blue) }
+        useRow?.apply { text = if (current) "In Use â" else "Switch to iBoard"; setTextColor(if (current) p.secondary else p.blue) }
     }
 
     /** The iBoard icon: gradient squircle with a little keyboard. */

@@ -20,6 +20,7 @@ class Prefs(context: Context) {
     val doubleSpacePeriod: Boolean get() = sp.getBoolean(DOUBLE_SPACE, true)
     val learnWords: Boolean get() = sp.getBoolean(LEARN, true)
     val clipboardHistory: Boolean get() = sp.getBoolean(CLIP_HISTORY, true)
+    val aiPredictions: Boolean get() = sp.getBoolean(AI_PREDICTIONS, false)
 
     // Key customization
     val keyStyle: String get() = sp.getString(KEY_STYLE, "glass") ?: "glass"
@@ -103,6 +104,7 @@ class Prefs(context: Context) {
         const val DOUBLE_SPACE = "double_space_period"
         const val LEARN = "learn_words"
         const val CLIP_HISTORY = "clipboard_history"
+        const val AI_PREDICTIONS = "ai_next_word_predictions"
         const val LANGUAGES = "languages"
         const val CURRENT_LANG = "current_language"
         const val KEY_STYLE = "key_style"
@@ -115,8 +117,8 @@ class Prefs(context: Context) {
         const val STRIP_ICONS = "strip_icons"
         const val STRIP_BUTTONS = "strip_buttons"
         const val MAX_STRIP_BUTTONS = 2
-        /** The six icon-capsule buttons, in capsule order. */
-        val DOCK_BUTTONS = listOf(KeyType.SETTINGS, KeyType.EMOJI, KeyType.GLOBE, KeyType.MIC, KeyType.CLIPBOARD, KeyType.TRANSLATE)
+        /** Icon-capsule buttons, in capsule order. */
+        val DOCK_BUTTONS = listOf(KeyType.SETTINGS, KeyType.EMOJI, KeyType.GLOBE, KeyType.MIC, KeyType.CLIPBOARD, KeyType.TRANSLATE, KeyType.AI_ASSIST)
         const val ACCENT_COLOR = "accent_color"
         const val BG_OPACITY = "bg_opacity"
         const val HIDE_ICON = "hide_app_icon"
@@ -126,19 +128,19 @@ class Prefs(context: Context) {
 
         fun languageLabel(code: String): String = when (code) {
             "en" -> "English"
-            "es" -> "Español"
-            "fr" -> "Français"
-            "pt" -> "Português"
+            "es" -> "EspaÃ±ol"
+            "fr" -> "FranÃ§ais"
+            "pt" -> "PortuguÃªs"
             "de" -> "Deutsch"
-            "ar" -> "العربية"
-            "tr" -> "Türkçe"
+            "ar" -> "Ø§ÙØ¹Ø±Ø¨ÙØ©"
+            "tr" -> "TÃ¼rkÃ§e"
             "it" -> "Italiano"
             "pl" -> "Polski"
             "da" -> "Dansk"
-            "cs" -> "Čeština"
-            "hi" -> "हिन्दी"
-            "ko" -> "한국어"
-            "zh" -> "简体中文"
+            "cs" -> "ÄeÅ¡tina"
+            "hi" -> "à¤¹à¤¿à¤¨à¥à¤¦à¥"
+            "ko" -> "íêµ­ì´"
+            "zh" -> "ç®ä½ä¸­æ"
             else -> code
         }
 

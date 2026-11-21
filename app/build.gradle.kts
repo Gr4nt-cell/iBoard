@@ -86,4 +86,6 @@ dependencies {
     // On-device translation and language detection (models downloaded once, then offline).
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.mlkit:language-id:17.0.6")
+    // Gemini Nano through Android AI Core; generation stays on-device.
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
 }

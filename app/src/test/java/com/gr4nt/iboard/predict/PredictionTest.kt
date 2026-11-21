@@ -1,6 +1,7 @@
 package com.gr4nt.iboard.predict
 
 import com.gr4nt.iboard.*
+import com.gr4nt.iboard.ai.OnDeviceAiEngine
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.Rule
@@ -63,8 +64,8 @@ class PredictionTest {
     @Test fun sentenceContextNeverCrossesNewlineOrPunctuation() {
         assertEquals(PredictionContext("am", "I", false), PredictionContext.from("Old sentence. I am "))
         assertEquals(PredictionContext(null, null, true), PredictionContext.from("Hello\n"))
-        assertEquals(PredictionContext(null, null, true), PredictionContext.from("مرحبا؟ "))
-        assertEquals(PredictionContext("don't", "I", false), PredictionContext.from("I don’t "))
+        assertEquals(PredictionContext(null, null, true), PredictionContext.from("ÙØ±Ø­Ø¨Ø§Ø "))
+        assertEquals(PredictionContext("don't", "I", false), PredictionContext.from("I donât "))
         assertEquals(PredictionContext("You", null, false), PredictionContext.from("I was. You "))
     }
 
@@ -99,5 +100,12 @@ class PredictionTest {
         assertEquals(1f, FloatingBounds.fraction(400f, 12, 300), 0f)
         val fraction = FloatingBounds.fraction(156f, 12, 300)
         assertEquals(256, FloatingBounds.position(fraction, 12, 500))
+    }
+
+    @Test fun generatedSuggestionsArePlainUniqueAndLimited() {
+        assertEquals(
+            listOf("thanks", "I can help"),
+            OnDeviceAiEngine.parsePredictions("1. thanks\n- I can help\n\"thanks\"\nThis line is far too long to fit in a keyboard suggestion and should be ignored"),
+        )
     }
 }

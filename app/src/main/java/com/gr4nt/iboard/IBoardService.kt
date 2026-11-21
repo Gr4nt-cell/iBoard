@@ -17,6 +17,8 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.gr4nt.iboard.ai.AiAssistantPanel
+import com.gr4nt.iboard.ai.OnDeviceAiEngine
 import com.gr4nt.iboard.clipboard.ClipboardPanel
 import com.gr4nt.iboard.clipboard.ClipboardStore
 import com.gr4nt.iboard.emoji.EmojiPanel
@@ -46,6 +48,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var keyboard: KeyboardView? = null
     private var emojiPanel: EmojiPanel? = null
     private var clipPanel: ClipboardPanel? = null
+    private var aiPanel: AiAssistantPanel? = null
     private var kbTheme: KeyboardTheme? = null
     private var builtSignature = ""
 
@@ -61,6 +64,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private var ownCaps = true
 
     private var suggester: Suggester? = null
+    private val aiEngine by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { OnDeviceAiEngine() }
+    private var aiPredictionJob: Job? = null
+    private var aiPredictionSequence = 0L
+    private var aiPanelJob: Job? = null
     private var shown: List<Suggestion> = emptyList()
     private var pendingAutoCorrect: String? = null
     private var lastAutoCorrect: Triple<String, String, String>? = null // original, replacement, separator
@@ -101,12 +108,12 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     private fun toggleVoice() {
         finishComposer()
-        online?.let { it.stop(); voiceMessage("Finishing… Tap mic to cancel"); online = null; return }
+        online?.let { it.stop(); voiceMessage("Finishingâ¦ Tap mic to cancel"); online = null; return }
         if (voiceJob?.isActive == true) {
             if (recorder != null) {
                 recorder?.stop()
                 recorder = null
-                voiceMessage("Finishing offline… Tap mic to cancel")
+                voiceMessage("Finishing offlineâ¦ Tap mic to cancel")
             } else cancelVoice()
             return
         }
@@ -179,7 +186,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             })
         if (!speech.start()) { toast("Online dictation isn't available. Using offline dictation."); startOfflineVoice(); return }
         online = speech
-        voiceMessage("Listening · Tap mic to finish")
+        voiceMessage("Listening Â· Tap mic to finish")
     }
 
     private fun startOfflineVoice() {
@@ -188,7 +195,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val language = lang
         val queue = kotlinx.coroutines.channels.Channel<FloatArray>(3)
         voiceQueue = queue
-        voiceMessage("Preparing voice model…")
+        voiceMessage("Preparing voice modelâ¦")
         voiceJob = scope.launch {
             var model: com.gr4nt.iboard.voice.WhisperLib.Model? = null
             try {
@@ -196,7 +203,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                     val chosen = com.gr4nt.iboard.voice.SpeechModels.active(this@IBoardService, install = true)
                         ?: throw NoVoiceModel()
                     model = com.gr4nt.iboard.voice.WhisperLib.load(com.gr4nt.iboard.voice.SpeechModels.file(this@IBoardService, chosen).path)
-                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings › Voice Model.")
+                        ?: error("This voice model couldn't be loaded. Delete it and download it again in Settings âº Voice Model.")
                 }
                 val loaded = model ?: error("Unable to load offline speech")
                 voiceModel = loaded
@@ -208,22 +215,22 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                         }
                     },
                     onLevel = {},
-                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offline… Tap mic to cancel") } } },
+                    onLongSilence = { scope.launch { if (session == voiceSession) { recorder = null; voiceMessage("Finishing offlineâ¦ Tap mic to cancel") } } },
                     onError = { scope.launch { if (session == voiceSession) { toast("Microphone unavailable. Check microphone access."); cancelVoice() } } },
                     onFinished = { queue.close() },
                 )
                 recorder = capture
                 if (!capture.start()) error("Cannot open microphone. Check microphone access.")
-                voiceMessage("Listening offline · Tap mic to finish")
+                voiceMessage("Listening offline Â· Tap mic to finish")
                 var committed = false
                 for (samples in queue) {
                     val started = SystemClock.elapsedRealtime()
                     val progress = launch {
                         while (session == voiceSession) {
                             val seconds = (SystemClock.elapsedRealtime() - started) / 1000
-                            val percent = loaded.progress().let { if (it in 1..99) " · $it%" else "" }
+                            val percent = loaded.progress().let { if (it in 1..99) " Â· $it%" else "" }
                             val action = if (recorder != null) "mic finishes" else "mic cancels"
-                            keyboard?.voiceStatus = "Transcribing$percent · ${seconds}s · $action"
+                            keyboard?.voiceStatus = "Transcribing$percent Â· ${seconds}s Â· $action"
                             delay(500)
                         }
                     }
@@ -243,14 +250,14 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                         committed = true
                         refresh()
                     }
-                    voiceMessage(if (recorder != null) "Listening offline · Tap mic to finish" else "Finishing offline · Tap mic to cancel")
+                    voiceMessage(if (recorder != null) "Listening offline Â· Tap mic to finish" else "Finishing offline Â· Tap mic to cancel")
                 }
                 if (!committed && session == voiceSession) toast("No speech recognized. Please try again closer to the microphone.")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: NoVoiceModel) {
                 if (session == voiceSession) {
-                    toast("Download a voice model first: Settings › Voice Model")
+                    toast("Download a voice model first: Settings âº Voice Model")
                     runCatching {
                         startActivity(Intent(this@IBoardService, com.gr4nt.iboard.settings.SettingsActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("open", "voice_model"))
@@ -440,6 +447,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInput() {
         cancelVoice()
+        cancelAiPrediction()
+        closePanels()
         clearComposer()
         editorSession = null
         keyboard?.removeCallbacks(refreshRunnable)
@@ -602,6 +611,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     override fun onKey(key: Key) {
         if (key.type == KeyType.MIC) { toggleVoice(); return }
         if (voiceJob?.isActive == true || online != null) cancelVoice()
+        if (key.type == KeyType.AI_ASSIST) { showAiAssistant(); return }
         if (key.type == KeyType.TRANSLATE) { if (translateBuf != null) endTranslate() else startTranslate(); return }
         translateBuf?.let { buf ->
             when (key.type) {
@@ -820,7 +830,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun showTranslateBar() {
         val buf = translateBuf ?: run { keyboard?.translate = null; return }
         val from = if (tFrom == com.gr4nt.iboard.translate.TranslatorEngine.DETECT && detected != null)
-            "${com.gr4nt.iboard.translate.TranslatorEngine.short(detected!!)} ✓" else com.gr4nt.iboard.translate.TranslatorEngine.short(tFrom)
+            "${com.gr4nt.iboard.translate.TranslatorEngine.short(detected!!)} â" else com.gr4nt.iboard.translate.TranslatorEngine.short(tFrom)
         keyboard?.translate = KeyboardView.Translate(from, com.gr4nt.iboard.translate.TranslatorEngine.short(tTo), buf.toString(), translateStatus)
     }
 
@@ -845,7 +855,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         scope.launch {
             try {
                 if (!engine.isDownloaded(from, to)) {
-                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}â¦"
                     showTranslateBar()
                     engine.download(from, to)
                     translateStatus = null
@@ -878,7 +888,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
                 }
                 val to = tTo
                 if (!engine.isDownloaded(from, to)) {
-                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}…"
+                    translateStatus = "Downloading ${com.gr4nt.iboard.translate.TranslatorEngine.name(if (from == "en") to else from)}â¦"
                     showTranslateBar()
                     engine.download(from, to)
                 }
@@ -1150,10 +1160,10 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             val c = before[i - 1]
             if (c.isLetter() || Character.getType(c) == Character.NON_SPACING_MARK.toInt() ||
                 Character.getType(c) == Character.COMBINING_SPACING_MARK.toInt() ||
-                (c in "'’" && i > 1 && before[i - 2].isLetter())
+                (c in "'â" && i > 1 && before[i - 2].isLetter())
             ) i-- else break
         }
-        return before.substring(i).trimStart('\'', '’')
+        return before.substring(i).trimStart('\'', 'â')
     }
 
     private fun refresh() {
@@ -1181,6 +1191,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     private fun refreshSuggestions() {
         val kv = keyboard ?: return
         val ic = currentInputConnection ?: return
+        cancelAiPrediction()
         if (password || lang == "zh") {
             show(emptyList()); return
         }
@@ -1207,7 +1218,43 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val clip = if (word.isEmpty() && prefs.clipboardHistory) clipStore.recent(90_000)
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
 
-        show(if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3))
+        val visible = if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3)
+        show(visible)
+        if (word.isEmpty() && prefs.aiPredictions && !password && !incognito &&
+            fieldKind == FieldKind.TEXT && !noAutoCorrect
+        ) {
+            requestAiPredictions(before, visible)
+        }
+    }
+
+    private fun cancelAiPrediction() {
+        aiPredictionSequence++
+        aiPredictionJob?.cancel()
+        aiPredictionJob = null
+    }
+
+    private fun requestAiPredictions(before: String, fallback: List<Suggestion>) {
+        val session = editorSession
+        val sequence = ++aiPredictionSequence
+        aiPredictionJob = scope.launch {
+            delay(350)
+            try {
+                if (aiEngine.state() != OnDeviceAiEngine.State.AVAILABLE) return@launch
+                val words = aiEngine.predictNextWords(before)
+                if (sequence != aiPredictionSequence || editorSession != session ||
+                    password || incognito || fieldKind != FieldKind.TEXT
+                ) return@launch
+                val latest = currentInputConnection?.getTextBeforeCursor(320, 0)?.toString() ?: return@launch
+                if (latest != before || words.isEmpty()) return@launch
+                val clip = fallback.firstOrNull { it.kind == Suggestion.Kind.CLIP }
+                val ai = words.map { Suggestion(it, Suggestion.Kind.WORD) }
+                show((listOfNotNull(clip) + ai).take(3))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Keep the existing local suggestions if Gemini Nano is unavailable or fails.
+            }
+        }
     }
 
     private fun show(list: List<Suggestion>) {
@@ -1264,11 +1311,104 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         frame.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
     }
 
+    private fun showAiAssistant() {
+        if (password || incognito || fieldKind != FieldKind.TEXT) {
+            toast("iBoard AI is unavailable in this private or non-text field")
+            return
+        }
+        val frame = root ?: return
+        val theme = kbTheme ?: return
+        val ic = currentInputConnection ?: return
+        val selected = ic.getSelectedText(0)?.toString().orEmpty().trim()
+        val source = selected.ifBlank {
+            ic.getTextBeforeCursor(500, 0)?.toString().orEmpty().trim().takeLast(420)
+        }
+        cancelAiPrediction()
+        finishComposer()
+        endEmojiSearch()
+        closePanels()
+        lateinit var panel: AiAssistantPanel
+        panel = AiAssistantPanel(this, theme, panelHeight(), source, object : AiAssistantPanel.Listener {
+            override fun onGenerate(action: OnDeviceAiEngine.Action, source: String) {
+                aiPanelJob?.cancel()
+                aiPanelJob = scope.launch {
+                    try {
+                        when (aiEngine.state()) {
+                            OnDeviceAiEngine.State.AVAILABLE -> {
+                                val result = aiEngine.write(action, source)
+                                if (aiPanel === panel) {
+                                    panel.setResult(result)
+                                    panel.setStatus("Ready · generated on this phone")
+                                }
+                            }
+                            OnDeviceAiEngine.State.DOWNLOADABLE ->
+                                panel.setStatus("Tap Prepare Model above, or download it in Settings.")
+                            OnDeviceAiEngine.State.DOWNLOADING ->
+                                panel.setStatus("Android AI Core is downloading the model.")
+                            OnDeviceAiEngine.State.UNAVAILABLE ->
+                                panel.setStatus("Gemini Nano is not supported on this phone.")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        panel.setStatus("Couldn't generate text. Check model readiness in Settings.")
+                    } finally {
+                        if (aiPanel === panel) panel.setBusy(false)
+                    }
+                }
+            }
+
+            override fun onApply(text: String) {
+                if (text.isNotBlank()) {
+                    currentInputConnection?.commitText(text, 1)
+                    closePanels()
+                }
+            }
+
+            override fun onPrepareModel() {
+                aiPanelJob?.cancel()
+                aiPanelJob = scope.launch {
+                    panel.setStatus("Preparing on-device model…")
+                    try {
+                        aiEngine.download { progress ->
+                            if (aiPanel === panel) panel.setStatus(progress)
+                        }
+                        if (aiPanel === panel) panel.setStatus("Ready · generated on this phone")
+                    } catch (_: Exception) {
+                        val state = aiEngine.state()
+                        if (aiPanel === panel) panel.setStatus(
+                            if (state == OnDeviceAiEngine.State.UNAVAILABLE)
+                                "Gemini Nano is not supported on this phone."
+                            else "Download failed. Check internet and Android AI Core."
+                        )
+                    }
+                }
+            }
+
+            override fun onClose() = closePanels()
+        })
+        aiPanel = panel
+        keyboard?.visibility = View.GONE
+        frame.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight()))
+        scope.launch {
+            panel.setStatus(when (aiEngine.state()) {
+                OnDeviceAiEngine.State.AVAILABLE -> "Ready · generated on this phone"
+                OnDeviceAiEngine.State.DOWNLOADABLE -> "Model available to download in Settings."
+                OnDeviceAiEngine.State.DOWNLOADING -> "Android AI Core is downloading the model."
+                OnDeviceAiEngine.State.UNAVAILABLE -> "Gemini Nano is not supported on this phone."
+            })
+        }
+    }
+
     private fun closePanels() {
+        aiPanelJob?.cancel()
+        aiPanelJob = null
         emojiPanel?.let { root?.removeView(it) }
         clipPanel?.let { root?.removeView(it) }
+        aiPanel?.let { root?.removeView(it) }
         emojiPanel = null
         clipPanel = null
+        aiPanel = null
         keyboard?.visibility = View.VISIBLE
     }
 
