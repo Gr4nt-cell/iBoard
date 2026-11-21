@@ -70,6 +70,14 @@ class Prefs(context: Context) {
             edit.putString(KEY_STYLE, "glass").putInt(KEY_RADIUS, 12)
                 .putBoolean("offline_keyboard_v1", true).apply()
         }
+        // Gemini Nano replaced the built-in prediction and Whisper dictation: free their files once.
+        if (!sp.getBoolean("gemini_nano_v1", false)) {
+            java.io.File(context.noBackupFilesDir, "speech").deleteRecursively()
+            context.getExternalFilesDir(null)?.let { java.io.File(it, "speech-download").deleteRecursively() }
+            context.filesDir.listFiles { f -> f.name.startsWith("user_") && (f.name.endsWith(".tsv") || f.name.endsWith(".tmp")) }
+                ?.forEach { it.delete() }
+            sp.edit().remove("dictation_engine").remove("voice_learn").putBoolean("gemini_nano_v1", true).apply()
+        }
     }
 
     val languages: List<String>

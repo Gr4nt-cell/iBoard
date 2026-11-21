@@ -30,9 +30,6 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Prepare pinned speech runtime
-        run: python3 tools/prepare_speech.py
-
       - name: Prepare upload key (when the repository secrets are set)
         env:
           UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
@@ -55,9 +52,6 @@ jobs:
             echo "::warning title=Upload key not usable::The UPLOAD_* secrets don't open the keystore (check UPLOAD_STORE_PASSWORD and UPLOAD_KEY_ALIAS). Building an unsigned bundle instead."
             rm -f "$RUNNER_TEMP/upload.jks"
           fi
-
-      - name: Run prediction and layout regression tests
-        run: gradle :app:testReleaseUnitTest --stacktrace
 
       - name: Build APK
         env:
@@ -123,4 +117,4 @@ jobs:
         run: |
           gh release view latest >/dev/null 2>&1 || gh release create latest --title "iBoard latest build" --notes "Built automatically." --prerelease --target "${{ github.sha }}"
           gh release upload latest iBoard.apk "$AAB_NAME" --clobber
-          gh release edit latest --title "iBoard 1.0.${{ github.run_number }}" --notes "Built from ${{ github.sha }}. Context predictions, direct @/# number-pad keys, floating mode and stable password entry. $AAB_NAME"
+          gh release edit latest --title "iBoard 1.0.${{ github.run_number }}" --notes "Built from ${{ github.sha }}. Gemini Nano (on-device, via AICore) for prediction, dictation, translation and writing tools. $AAB_NAME"

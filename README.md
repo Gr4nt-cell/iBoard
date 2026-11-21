@@ -12,15 +12,21 @@ An offline Android keyboard with Liquid Glass keys, local word prediction and th
 - Number row, accents, cursor movement while holding space, long-press backspace, clipboard history and language switching remain available.
 - Emoji and clipboard panels resize with the device; the emoji grid adapts from 6 to 20 columns.
 
-## Prediction, entirely on the phone
+## AI: Gemini Nano only
 
-The six bundled frequency dictionaries support English, Español, Français, Português, Deutsch and العربية. Local prediction includes prefix completions, weighted neighboring-key corrections, transpositions, missing leading letters, accent/contraction matching, startup word pairs, learned words, bigrams and trigrams. Valid words and names are protected; autocorrection can be undone with backspace. Password fields disable suggestions and incognito fields do not train the user dictionary.
+Every AI feature in iBoard runs on **Gemini Nano**, Google's on-device model, through the ML Kit GenAI APIs (`genai-prompt`, `genai-speech-recognition`):
 
-These changes improve the existing engine; they are not a claim of parity with Yandex or another commercial keyboard. Corpus-trained bigram/trigram models are bundled for all six languages, with hundreds of thousands of contexts (see per-language JSON for exact counts). They interpolate the last two words, rank completions and combine with local personal learning. This is statistical machine learning, not a generative LLM.
+- **Word prediction:** completions, spelling corrections and next words in the suggestion bar.
+- **Dictation:** on-device speech recognition; words stream in while you speak.
+- **✨ AI tools** (the sparkle key): Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. A tool works on the selected text, or on the whole field when nothing is selected.
+
+Gemini Nano is **not bundled in the APK**, and it cannot be: Android's **AICore** system service installs it, updates it and runs it. iBoard asks AICore for it in Settings › Gemini Nano. It works only on phones that support Gemini Nano (for example Pixel 9 and later, Galaxy S25 and later, and recent Xiaomi, OPPO, vivo and Honor flagships) with a **locked bootloader**. On other phones iBoard types normally without prediction, dictation or AI tools.
+
+The earlier dictionary prediction, Whisper dictation, online dictation and ML Kit Translate have been removed.
 
 ## Settings
 
-Settings shares the keyboard background hues, translucent glass cards, rim highlights and accent controls. Light/dark follows the keyboard appearance preference. Tablets center the settings list at 720 dp. Offline dictation, microphone access and model information sit together under Offline intelligence. All existing controls remain available.
+Settings shares the keyboard background hues, translucent glass cards, rim highlights and accent controls. Light/dark follows the keyboard appearance preference. Tablets center the settings list at 720 dp. Gemini Nano status, its download, word prediction, dictation and microphone access sit together under Gemini Nano. All existing controls remain available.
 
 ## Emoji
 
@@ -28,49 +34,26 @@ Settings shares the keyboard background hues, translucent glass cards, rim highl
 
 The bundled font controls emoji rendering inside iBoard. The keyboard commits ordinary Unicode emoji; receiving apps use their own emoji rendering. Font provenance and the embedded license are recorded in `assets/fonts/FONT-NOTICE.md`.
 
-## Offline privacy
+## Privacy
 
-There is no cloud API, account, API-key screen, translation/grammar assistant or generative LLM dependency. The internet permission is used only to download a voice model. Dictation runs whisper.cpp on the phone: choose Fast (Whisper Tiny), Balanced (Whisper Base, recommended) or Accurate (Whisper Small) in Settings › Voice Model; Android's download manager fetches it from Hugging Face once, iBoard checks it and stores it privately, and from then on dictation works offline. Microphone permission is optional and requested after a deliberate microphone action. Audio is processed in memory and is neither saved nor transmitted. Tap the mic beside the globe to start, tap again to finish, or tap during finishing to cancel. Typing a key, closing the keyboard or changing fields cancels dictation and discards late results. Upgrade migration removes old provider preferences and credentials, cancels old model downloads and removes obsolete model files. Learned words, clipboard history and settings remain local, with Android app backup disabled.
+Text and voice are processed by Gemini Nano on the phone; iBoard sends nothing you type or say to any server. The internet permission is used only for the optional sticker and GIF packs. Microphone access is optional and used only for dictation you start. Password fields turn suggestions and AI tools off. Clipboard history and settings stay on the phone, and Android app backup is disabled.
 
 ## Build and checks
 
-Use JDK 17, Gradle 8.13 and the Android SDK (compileSdk 36, NDK 28.2.13676358, CMake 3.22.1):
+Use JDK 17+, Gradle 8.13 and the Android SDK (compileSdk 36). No NDK is needed any more:
 
 ```
-python3 tools/prepare_speech.py
 gradle :app:assembleDebug
 ```
 
 The existing GitHub release signing configuration is preserved. `GITHUB_RUN_NUMBER` controls the version code, as before.
 
-- `scripts/check-offline-keyboard.py`: production predictor, persistence and geometry tests using JVM context stubs. Set `IBOARD_GRADLE_LIB` to Gradle 8.13's `lib` directory when it is not at the task workspace location.
 - `scripts/prepare-emoji-font.py`: checks the attached font's sequence coverage with FontTools and HarfBuzz; extracts a small set of glyph images for design references.
 - `design/README.md`: Figma import instructions, design previews and validation details.
 
-## Speech finalizing fix (1.0.26)
+## Number pad and floating mode
 
-The previous debug APK optimized only the JNI shim; the transformer and matrix
-kernels were unoptimized. All native engine targets now use -O3 in every build
-variant. Dictation uses one greedy decoder instead of a five-hypothesis beam,
-processes chunks up to eight seconds, and reports elapsed transcription time.
-Native cancellation and a 45-second decoding deadline prevent an indefinite
-finishing state. Capture uses nonblocking reads, sample-based timing and
-thread-owned stop/release; short final utterances are drained before completion.
-
-Regression checks: `scripts/check-speech-jni.py` exercises the production Kotlin
-and JNI bridge with the actual bundled model, including transcription, native
-deadline, concurrent cancellation/close and repeat close.
-`scripts/check-speech-capture.py` verifies the production capture lifecycle against
-deterministic Android audio stubs. These host tests do not replace device testing.
-
-Version 1.0.27 centers a compact utility capsule around its icons instead of stretching it across the screen. Five controls use 44dp touch targets and 8dp gaps (252dp total width). Landscape clusters remain compact inside each keyboard half; the existing speech fixes remain included.
-
-## Context predictions, number pad and floating mode
-
-- Suggestions now combine learned, curated and corpus context instead of always placing learned word pairs first. English ranking checks common subject/verb agreement, auxiliary verb forms, participles, and a/an usage. These are ranking improvements, not a guarantee of complete grammar checking; valid typed words are not silently rewritten. Other languages retain their own local models.
-- Sentence and paragraph boundaries reset prediction context, including non-Latin sentence punctuation.
 - The number pad has direct @ and # keys. Long-press them for / and * respectively (with additional symbols available).
 - Enable Settings > Keyboard Position > Floating Keyboard. Drag the Move header; position is saved. Tap Dock to restore the bottom keyboard. Floating mode uses the input-method window, with touches restricted to the keyboard card, and needs no overlay permission.
-- GitHub Actions runs prediction/layout unit tests before building the next APK and AAB.
 
 Password fields now suppress entrance animation, character previews and automatic shift refresh. Restarts of the same editor preserve the selected page and avoid rebuilding the key geometry. Password characters/spaces are committed without punctuation cleanup or the double-space period shortcut.

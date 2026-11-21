@@ -7,12 +7,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
-    <!-- Lets online dictation find the phone's speech recognition service (Android 11+). -->
-    <queries>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
-    </queries>
 
 
 
