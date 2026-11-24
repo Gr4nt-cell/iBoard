@@ -19,7 +19,7 @@ class PredictionTest {
         )
         val dict = Dictionary(lang, words.map { Dictionary.normalize(it) }.toTypedArray(), words.toTypedArray(), FloatArray(words.size) { 4f }, lookup,
             listOf("the", "a", "you"), emptyMap(), model)
-        return Suggester(dict, UserModel(folder.newFolder(), lang), Suggester.neighborsFor(Layouts.letterRows.getValue("en")))
+        return Suggester(dict, com.gr4nt.iboard.predict.engine.PersonalStore(com.gr4nt.iboard.predict.engine.MemoryPersistence(), lang), Suggester.neighborsFor(Layouts.letterRows.getValue("en")))
     }
 
     @Test fun agreementBeatsFrequentLearnedMistakes() {

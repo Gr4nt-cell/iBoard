@@ -25,7 +25,9 @@ import com.gr4nt.iboard.predict.Dictionary
 import com.gr4nt.iboard.predict.SpatialModel
 import com.gr4nt.iboard.predict.Suggester
 import com.gr4nt.iboard.predict.Suggestion
-import com.gr4nt.iboard.predict.UserModel
+import com.gr4nt.iboard.predict.engine.NanoBooster
+import com.gr4nt.iboard.predict.engine.PersonalStore
+import com.gr4nt.iboard.predict.engine.PredictionEngine
 import com.gr4nt.iboard.settings.SettingsActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -553,7 +555,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             }
         } else if (suggester == null) {
             scope.launch {
-                val s = withContext(Dispatchers.Default) { loadSuggester(applicationContext, code) }
+                val s = withContext(Dispatchers.Default) { loadSuggester(applicationContext, code).also { it.engine?.warmUp() } }
                 if (lang == code) { suggester = s; s.spatial = keyboard?.spatialModel(); refresh() }
             }
         }
@@ -763,8 +765,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val s = shown.getOrNull(index) ?: return
         val ic = currentInputConnection ?: return
         finishComposer()
-        val word = currentWord(ic.getTextBeforeCursor(64, 0)?.toString() ?: "")
+        val beforeTap = ic.getTextBeforeCursor(64, 0)?.toString() ?: ""
+        val word = currentWord(beforeTap)
         feedback(KeyType.CHAR)
+        if (s.kind == Suggestion.Kind.WORD && !incognito && !password && prefs.learnWords)
+            suggester?.user?.accepted(com.gr4nt.iboard.predict.PredictionContext.from(beforeTap.dropLast(word.length)).previous, s.text)
         ic.beginBatchEdit()
         when (s.kind) {
             Suggestion.Kind.CLIP -> {
@@ -1150,6 +1155,8 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val committed = tokens.lastOrNull()?.trimEnd('.', ',', '!', '?')?.equals(word, true) == true
         val prev2 = tokens.getOrNull(tokens.size - if (committed) 3 else 2)
         s.user.learn(word, prev?.trim { !it.isLetter() }, prev2?.trim { !it.isLetter() })
+        if (nextShown.isNotEmpty()) s.user.ignored(nextShownFor, nextShown, word)
+        nextShown = emptyList()
     }
 
     // ------------------------------------------------------------ suggestions
@@ -1189,8 +1196,9 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
     }
 
     /**
-     * Built-in engine first (instant, every phone, drives autocorrect); where Gemini Nano is ready
-     * its predictions are merged in a moment later.
+     * Two steps, identical on every phone. First an instant answer from the built-in engine's n-gram,
+     * personal and grammar layers (this also drives autocorrect). A moment later the same engine adds its neural
+     * model, and Gemini Nano's guesses where the phone has it, and the strip is refreshed if nothing has changed.
      */
     private fun refreshSuggestions() {
         keyboard ?: return
@@ -1200,6 +1208,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         val before = ic.getTextBeforeCursor(320, 0)?.toString() ?: ""
         val word = currentWord(before)
         val head = before.substring(0, before.length - word.length)
+        val atStart = before.length < 320
         val context = com.gr4nt.iboard.predict.PredictionContext.from(head)
         val s = suggester
         if (s != null && word.isNotEmpty()) s.spatial = keyboard?.spatialModel()
@@ -1214,35 +1223,43 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             else -> null
         }
         pendingAutoCorrect = null
-        val local: List<Suggestion> = if (word.isNotEmpty()) {
-            if (s == null) listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else {
-                val r = s.forWord(word, context.previous, prefs.autoCorrect && !noAutoCorrect && lang !in noAutoCorrectLangs,
-                    context.sentenceStart, context.before, touches)
-                pendingAutoCorrect = r.autoCorrect
-                r.items
-            }
-        } else s?.nextWords(context.previous, context.sentenceStart, context.before) ?: emptyList()
+        var plan: Suggester.Plan? = null
+        val local: List<Suggestion> = if (s == null) {
+            if (word.isNotEmpty()) listOf(Suggestion(word, Suggestion.Kind.LITERAL)) else emptyList()
+        } else {
+            val p = s.plan(word, context.previous, prefs.autoCorrect && !noAutoCorrect && lang !in noAutoCorrectLangs,
+                context.sentenceStart, context.before, touches, head, atStart)
+            plan = p
+            val r = s.finish(p, s.quickRank(p))
+            pendingAutoCorrect = r.autoCorrect
+            r.items
+        }
 
         val clip = if (word.isEmpty() && prefs.clipboardHistory) clipStore.recent(90_000)
             ?.takeIf { it.text != pastedClip && !before.endsWith(it.text) } else null
         val base = if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + local.take(2) else local.take(3)
         show(base)
+        if (word.isEmpty()) { nextShown = local.filter { it.kind == Suggestion.Kind.WORD }.map { it.text }.take(3); nextShownFor = context.previous }
 
-        if (!prefs.sp.getBoolean(PREF_AI_PREDICT, true) || !GeminiNano.ready) return
-        if (word.isEmpty() && head.isBlank()) return
+        val engine = s?.engine
+        if (s == null || plan == null || engine == null || (word.isEmpty() && head.isBlank() && !atStart)) return
         val session = editorSession
         val autoCorrect = pendingAutoCorrect
+        val thePlan = plan
         predictJob = scope.launch {
-            delay(if (word.isEmpty()) 220 else 140)
-            val words = GeminiNano.predict(head, word, lang)
+            // A burst of typing only needs the last keystroke: wait briefly, then compute off the main thread.
+            delay(if (word.isEmpty()) 30 else 20)
+            val ranking = s.liveRank(thePlan)
             if (editorSession != session || currentInputConnection !== ic || pendingAutoCorrect != autoCorrect) return@launch
-            // Keep the typed word, the clipboard chip and any autocorrect; fill the rest from Gemini Nano.
-            val fixed = base.filter { it.kind == Suggestion.Kind.LITERAL || it.kind == Suggestion.Kind.CLIP || it.autoCorrect }
-            val nano = words.filter { w -> fixed.none { it.text.equals(w, ignoreCase = true) } }.map { Suggestion(it, Suggestion.Kind.WORD) }
-            val rest = base.filter { it !in fixed && nano.none { n -> n.text.equals(it.text, ignoreCase = true) } }
-            show((fixed + nano + rest).take(3))
+            val items = s.finish(thePlan, ranking).items
+            // Keep the clipboard chip exactly as it was; only the word suggestions are refreshed.
+            show(if (clip != null) listOf(Suggestion(clip.text, Suggestion.Kind.CLIP)) + items.take(2) else items.take(3))
         }
     }
+
+    /** The word suggestions shown before the user started typing the current word, for learning what they skip. */
+    private var nextShown: List<String> = emptyList()
+    private var nextShownFor: String? = null
 
     // ------------------------------------------------------------ Gemini Nano tools
 
@@ -1421,7 +1438,11 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
             loaded[code]?.let { return it }
             val dict = Dictionary.load(context, code)
             val rows = Layouts.letterRows[code] ?: Layouts.letterRows.getValue("en")
-            val s = Suggester(dict, UserModel(context, code), Suggester.neighborsFor(rows))
+            val personal = PersonalStore(context, code)
+            val prefs = Prefs(context)
+            val booster = NanoBooster(enabled = { prefs.sp.getBoolean(PREF_AI_PREDICT, true) })
+            val engine = runCatching { PredictionEngine.load(context, code, personal, booster) }.getOrNull()
+            val s = Suggester(dict, personal, Suggester.neighborsFor(rows), engine)
             loaded[code] = s
             return s
         }
@@ -1430,7 +1451,7 @@ class IBoardService : InputMethodService(), KeyboardView.Listener {
         fun resetLearned(context: Context) {
             synchronized(this) {
                 Prefs.ALL_LANGS.forEach { code ->
-                    loaded[code]?.user?.clear() ?: UserModel(context, code).clear()
+                    loaded[code]?.user?.clear() ?: PersonalStore(context, code).clear()
                 }
             }
         }

@@ -14,19 +14,27 @@ An offline Android keyboard with Liquid Glass keys, local word prediction and th
 
 ## Prediction and AI
 
-**On every phone (offline, built in):**
+**Built in, on every phone (offline, identical with or without Gemini Nano):**
 
-- **Word prediction** for 6 languages: prefix completions, typo correction, contractions and accents, word-pair and three-word context models trained on Tatoeba, and personal learning of your own words and phrases.
+- **Next-word and completion engine (English)** that reads the whole sentence and offers words that make grammatical sense: after *how are you* it offers *doing*, *feeling*, *going*; after *I am going* it offers *to*. It is layered, and every layer ships inside the app:
+  - **Bundled neural language model:** a small int8 GRU (about 7 MB, 32k-word vocabulary) trained on Tatoeba, Anthropic hh-rlhf, OpenAssistant, SmolTalk and a FineWeb-Edu sample. It runs in plain Kotlin, keeps its state between words, and needs no network, no AICore and no Gemini Nano.
+  - **Kneser-Ney n-gram tables** (bigram to 4-gram), memory-mapped, for instant answers while the neural model works.
+  - **Personal layer** in SQLite: your own words, pairs and triples, recency weighted. It learns from suggestions you accept and mildly from ones you skip. Learned words from earlier versions are imported.
+  - **Grammar filter:** a word-class table plus agreement rules (*I am*, *she is*, modal + base verb, *a/an*) that keeps ungrammatical words out of the top suggestions.
+  - **Optional Gemini Nano booster:** on phones that have it, Nano's guesses join the other candidates as one more signal (150 ms cap). If it is missing or slow, nothing changes.
+- **Other languages** (6+) keep the dictionary, word-pair and personal models: prefix completions, typo correction, contractions and accents, word-pair and three-word context models trained on Tatoeba.
 - **Touch-aware correction:** each letter is scored by how far the finger landed from every key, not just "neighbouring key or not". It also handles fuzzy completion of long words. In a simulated sloppy-typing test on the English dictionary (`SpatialCorrectionTest`), the first suggestion was right for 85.9% of mistyped words, against 64.4% with neighbour keys only.
 - **Dictation** with OpenAI Whisper via whisper.cpp. The model is downloaded once from Hugging Face (Fast / Balanced / Accurate) in Settings › Offline Voice Model, then works offline.
 
 **Where the phone has Gemini Nano** (Android AICore, a supported phone with a locked bootloader):
 
-- Gemini Nano predictions are merged into the suggestion bar.
+- Gemini Nano boosts the suggestion bar (the built-in engine already gives a complete answer without it).
 - Dictation uses Gemini Nano speech recognition.
 - The ✨ key offers Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize.
 
 Gemini Nano is never bundled: AICore installs and runs it.
+
+The training and export pipeline is in `tools/prediction/` (see its README). `PredictionBenchmark` reports held-out accuracy, keystroke savings and latency.
 
 ## Settings
 

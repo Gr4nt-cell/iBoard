@@ -48,8 +48,8 @@ class SpatialCorrectionTest {
             .readLines().map { it.substringBefore('\t') }.drop(150).take(2500)
             .filter { w -> w.length in 4..9 && w.all { it in 'a'..'z' } }.take(500)
         val rnd = Random(7)
-        val plain = Suggester(dict, UserModel(folder.newFolder(), "en"), Suggester.neighborsFor(rows))
-        val touchy = Suggester(dict, UserModel(folder.newFolder(), "en"), Suggester.neighborsFor(rows)).apply { spatial = grid }
+        val plain = Suggester(dict, com.gr4nt.iboard.predict.engine.PersonalStore(com.gr4nt.iboard.predict.engine.MemoryPersistence(), "en"), Suggester.neighborsFor(rows))
+        val touchy = Suggester(dict, com.gr4nt.iboard.predict.engine.PersonalStore(com.gr4nt.iboard.predict.engine.MemoryPersistence(), "en"), Suggester.neighborsFor(rows)).apply { spatial = grid }
         var trials = 0; var hitPlain = 0; var hitTouch = 0
         for (w in words) {
             val touches = ArrayList<SpatialModel.Point>()

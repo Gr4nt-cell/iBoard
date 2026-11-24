@@ -281,8 +281,8 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 }
             }
-            section("Uses", "Gemini Nano predictions are added to iBoard's built-in ones. The ✨ tools sit behind the translate key: Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. Dictation uses Gemini Nano speech recognition, or the offline Whisper model when this phone doesn't have it.") {
-                switchRow(Icons.Kind.BOOK, indigo, "Gemini Nano Predictions", sp.getBoolean(IBoardService.PREF_AI_PREDICT, true)) { putBool(IBoardService.PREF_AI_PREDICT, it) }
+            section("Uses", "iBoard's built-in prediction engine works on every phone. Gemini Nano can add extra guesses on top of it. The ✨ tools sit behind the translate key: Translate, Fix grammar, Friendly, Professional, Shorter, Longer, Rephrase, Emojify and Summarize. Dictation uses Gemini Nano speech recognition, or the offline Whisper model when this phone doesn't have it.") {
+                switchRow(Icons.Kind.BOOK, indigo, "Boost Predictions with Gemini Nano", sp.getBoolean(IBoardService.PREF_AI_PREDICT, true)) { putBool(IBoardService.PREF_AI_PREDICT, it) }
                 switchRow(Icons.Kind.MIC, blue, "Dictation", sp.getBoolean("voice_typing", true)) { putBool("voice_typing", it) }
             }
         }
