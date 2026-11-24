@@ -17,7 +17,7 @@ An offline Android keyboard with Liquid Glass keys, local word prediction and th
 **Built in, on every phone (offline, identical with or without Gemini Nano):**
 
 - **Next-word and completion engine (English)** that reads the whole sentence and offers words that make grammatical sense: after *how are you* it offers *doing*, *feeling*, *going*; after *I am going* it offers *to*. It is layered, and every layer ships inside the app:
-  - **Bundled neural language model:** a small int8 GRU (about 7 MB, 32k-word vocabulary) trained on Tatoeba, Anthropic hh-rlhf, OpenAssistant, SmolTalk and a FineWeb-Edu sample. It runs in plain Kotlin, keeps its state between words, and needs no network, no AICore and no Gemini Nano.
+  - **Bundled neural language model:** a small int8 GRU (about 7.6 MB, 32k-word vocabulary) trained on Tatoeba, Anthropic hh-rlhf, OpenAssistant, SmolTalk and a FineWeb-Edu sample. It runs in plain Kotlin, keeps its state between words, and needs no network, no AICore and no Gemini Nano.
   - **Kneser-Ney n-gram tables** (bigram to 4-gram), memory-mapped, for instant answers while the neural model works.
   - **Personal layer** in SQLite: your own words, pairs and triples, recency weighted. It learns from suggestions you accept and mildly from ones you skip. Learned words from earlier versions are imported.
   - **Grammar filter:** a word-class table plus agreement rules (*I am*, *she is*, modal + base verb, *a/an*) that keeps ungrammatical words out of the top suggestions.

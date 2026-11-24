@@ -20,6 +20,7 @@ ap.add_argument("--seq", type=int, default=32); ap.add_argument("--minutes", typ
 ap.add_argument("--lr", type=float, default=3e-3); ap.add_argument("--dropout", type=float, default=0.15)
 ap.add_argument("--samples", type=int, default=3000); ap.add_argument("--full-minutes", type=float, default=4)
 ap.add_argument("--bench", action="store_true"); ap.add_argument("--vocab", type=int, default=0)
+ap.add_argument("--init", default="", help="warm start from a saved .pt state dict (continue training)")
 a = ap.parse_args()
 torch.set_num_threads(2); torch.manual_seed(1)
 NSPECIAL = 5  # <pad> <unk> <s> <num> ,
@@ -106,6 +107,8 @@ def dequantize_into(model):
 train = load("train.u16"); valid = load("valid.u16"); test = load("test.u16")
 V = a.vocab or int(max(train.max().item(), valid.max().item(), test.max().item()) + 1)
 model = LM(V, a.emb, a.hidden, a.layers, a.dropout)
+if a.init:
+    model.load_state_dict(torch.load(a.init)); print("warm start from", a.init, flush=True)
 _k = torch.arange(V, dtype=torch.float64)
 model.qprob = ((torch.log(_k + 2) - torch.log(_k + 1)) / math.log(V + 1)).float()
 LOGQ = torch.log(a.samples * model.qprob)
@@ -137,6 +140,7 @@ while not done:
             print(f"ep {epoch} step {step} tok {seen/1e6:.1f}M loss {run:.3f} ppl {math.exp(run):.1f} lr {lr:.5f} {seen/(time.time()-t0)/1000:.1f}k tok/s  {el/60:.1f}min", flush=True)
         if step % 4000 == 0:
             p, t1, t3, t5 = evaluate(model, valid); print(f"  VALID ppl {p:.1f}  top1 {t1:.3f} top3 {t3:.3f} top5 {t5:.3f}", flush=True)
+            torch.save(model.state_dict(), a.out + ".ckpt.pt")
     epoch += 1
 if a.bench:
     print(f"bench: {seen/(time.time()-t0):.0f} tok/s"); sys.exit()

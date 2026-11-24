@@ -18,7 +18,7 @@ object Ranker {
     )
 
     /** Neural model available. */
-    val FULL = Weights(lm = 1.0f, ngram = 0.875f, personal = 1.8f, grammar = 0.375f, nano = 1.0f, prior = 0.0375f, bonus = 0.45f)
+    val FULL = Weights(lm = 1.0f, ngram = 0.4375f, personal = 1.8f, grammar = 0.375f, nano = 1.0f, prior = 0.028f, bonus = 0.45f)
     /** First instant pass: n-gram, habits and grammar only. */
     val FAST = Weights(lm = 0f, ngram = 1.0f, personal = 1.8f, grammar = 0.5f, nano = 1.0f, prior = 0.15f, bonus = 0.45f)
 
