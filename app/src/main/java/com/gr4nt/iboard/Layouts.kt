@@ -88,10 +88,10 @@ object Layouts {
             Page.NUMBER_PAD -> {
                 fun digit(c: Char) = Key(KeyType.CHAR, c.toString(), 1.2f,
                     if (lang == "ar") listOf("٠١٢٣٤٥٦٧٨٩"[c.digitToInt()].toString()) else emptyList())
-                rows += KeyRow(listOf(Key(KeyType.CHAR, "+", 0.9f)) + "123".map(::digit) + Key(KeyType.BACKSPACE, width = 1.5f))
-                rows += KeyRow(listOf(Key(KeyType.CHAR, "-", 0.9f)) + "456".map(::digit) + Key(KeyType.CHAR, "@", 1.5f, listOf("/", "\\")))
-                rows += KeyRow(listOf(Key(KeyType.TO_SYMBOLS, "#+=", 0.9f)) + "789".map(::digit) + Key(KeyType.CHAR, "#", 1.5f, listOf("*", "%")))
-                rows += KeyRow(listOf(Key(KeyType.TO_LETTERS, "ABC", 0.9f), Key(KeyType.CHAR, ".", 1.2f), digit('0'), Key(KeyType.CHAR, ",", 1.2f), Key(KeyType.RETURN, width = 1.5f)))
+                rows += KeyRow(listOf(Key(KeyType.CHAR, "?", 0.9f, listOf("¿"))) + "123".map(::digit) + Key(KeyType.BACKSPACE, width = 1.5f))
+                rows += KeyRow(listOf(Key(KeyType.CHAR, "'", 0.9f, listOf("\"", "`"))) + "456".map(::digit) + Key(KeyType.CHAR, "@", 1.5f, listOf("/", "\\")))
+                rows += KeyRow(listOf(Key(KeyType.TO_SYMBOLS, "#+=", 0.9f)) + "789".map(::digit) + Key(KeyType.CHAR, "#", 1.5f, listOf("*")))
+                rows += KeyRow(listOf(Key(KeyType.TO_LETTERS, "ABC", 0.9f), Key(KeyType.CHAR, "%", 1.2f, listOf("‰")), digit('0').copy(width = 2.4f), Key(KeyType.RETURN, width = 1.5f)))
                 if (utilityRow && dock.isNotEmpty()) rows += KeyRow(dock, isUtility = true)
                 if (!utilityRow) listOf(KeyType.GLOBE, KeyType.MIC).filter(::free).map { Key(it, width = Key.FLEX) }
                     .takeIf { it.isNotEmpty() }?.let { rows += KeyRow(it, isUtility = true) }
